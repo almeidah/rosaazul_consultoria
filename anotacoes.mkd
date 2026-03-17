@@ -1,0 +1,50 @@
+# 1. Defina o ID do seu projeto (Substitua "SEU_PROJECT_ID" pelo seu ID real)
+PROJECT_ID="SEU_PROJECT_ID" 
+
+# 2. Defina o nome da imagem no Artifact Registry/Container Registry
+# O formato gcr.io é a maneira padrão de referenciar o repositório do Google Cloud.
+IMAGE_NAME="gcr.io/${PROJECT_ID}/extrator-magazord-job" 
+
+# 3. O Comando de Submissão em si:
+# - 'gcloud builds submit': Inicia o processo de construção na nuvem.
+# - '.': O ponto indica "todos os arquivos no diretório atual".
+# - '--tag ${IMAGE_NAME}': Atribui o nome e o destino da imagem construída.
+gcloud builds submit --tag ${IMAGE_NAME} .
+
+
+source .venv312/bin/activate
+
+
+---------------
+Abra seu terminal (o mesmo que você está usando).
+Execute o comando de autenticação:
+code
+Bash
+
+gcloud auth application-default login
+
+Siga as instruções no navegador:
+Este comando abrirá uma janela do seu navegador web.
+Você será solicitado a fazer login na sua conta do Google (a conta que tem acesso ao seu projeto e bucket pinkdata).
+Conceda as permissões solicitadas.
+Após o login bem-sucedido, a página deve confirmar que a autenticação foi concluída e você pode fechar a aba.
+Verifique novamente no terminal:
+Volte ao seu terminal.
+Execute o comando de verificação novamente:
+code
+Bash
+
+gcloud auth application-default print-access-token
+
+----------------------
+
+# comando para criar o container
+gcloud builds submit . --tag gcr.io/pinkdream/magazord-pipeline
+
+# Comando para listar todas as tags da sua imagem
+gcloud container images list-tags gcr.io/pinkdream/magazord-pipeline
+
+
+
+## ativar venv
+source .venv/bin/activate

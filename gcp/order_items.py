@@ -1,0 +1,206 @@
+import os
+import pandas as pd
+import asyncio
+import aiohttp
+import random
+import logging
+import io 
+from datetime import datetime, timedelta
+from google.cloud import storage 
+
+# -------------------------------
+# 0️⃣ Logging
+# -------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# -------------------------------
+# 1️⃣ Carregar e Validar variáveis de ambiente
+# -------------------------------
+BASE_URL = os.getenv("MAGAZORD_BASE_URL")
+USER = os.getenv("MAGAZORD_USER")
+PASS = os.getenv("MAGAZORD_PASS")
+
+if not all([BASE_URL, USER, PASS]):
+    logger.error("🚫 Erro de Configuração: Variáveis de ambiente MAGAZORD_BASE_URL, USER ou PASS não foram definidas.")
+    raise EnvironmentError("Variáveis de ambiente Magazord ausentes. Configure o Cloud Run Job.")
+
+# -------------------------------
+# 2️⃣ Configurações iniciais
+# -------------------------------
+SITUACOES_APROVADO = [4, 5, 6, 7, 8]  
+LIMIT = 100
+MAX_CONCURRENT = 4 
+
+# Período de extração (Padrão 1 dia para Jobs frequentes)
+DIAS_ATRAS = int(os.getenv("DAYS_AGO", 30))
+DATA_INICIO = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%m-%d")
+DATA_FIM    = datetime.today().strftime("%Y-%m-%d")
+
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
+GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "meujeans")
+GCS_FILE_NAME = "order_items.csv" 
+
+# -------------------------------
+# 3️⃣ Função para buscar pedidos
+# -------------------------------
+async def buscar_pedidos(session, data_inicio, data_fim):
+    todos_pedidos = []
+    page = 1
+    while True:
+        params = {
+            "dataHora[gte]": data_inicio,
+            "dataHora[lte]": data_fim,
+            "situacao": ",".join(map(str, SITUACOES_APROVADO)), 
+            "limit": LIMIT,
+            "page": page,
+            "orderDirection": "asc"
+        }
+        try:
+            async with session.get(f"{BASE_URL}/v2/site/pedido", 
+                                   auth=aiohttp.BasicAuth(USER, PASS), 
+                                   params=params, 
+                                   ssl=False) as resp:
+                if resp.status != 200:
+                    logger.error(f"❌ Erro ao buscar pedidos na página {page}: {resp.status}")
+                    break
+                result = await resp.json()
+                pedidos = result.get("data", {}).get("items", [])
+                if not pedidos:
+                    break
+                todos_pedidos.extend(pedidos)
+                logger.info(f"✅ Página {page} carregada ({len(pedidos)} pedidos)")
+                page += 1
+        except Exception as e:
+            logger.error(f"❌ Exceção ao buscar pedidos na página {page}: {e}")
+            break
+    return todos_pedidos
+
+# -------------------------------
+# 4️⃣ Função para buscar itens de um pedido
+# -------------------------------
+async def buscar_itens(session, pedido):
+    codigo_pedido = pedido["codigo"]
+    detalhe_url = f"{BASE_URL}/v2/site/pedido/{codigo_pedido}"
+    itens = []
+
+    for attempt in range(3): 
+        try:
+            async with session.get(detalhe_url, auth=aiohttp.BasicAuth(USER, PASS), ssl=False) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    pedido_data = data.get("data", {})
+                    for rastreio in pedido_data.get("arrayPedidoRastreio", []):
+                        for item in rastreio.get("pedidoItem", []):
+                            itens.append({
+                                "codigoPedido": codigo_pedido,
+                                "dataHora": pedido_data.get("dataHora"),
+                                "cliente": pedido_data.get("pessoaNome"),
+                                "produtoDerivacaoCodigo": item.get("produtoDerivacaoCodigo"), 
+                                "produtoId": item.get("produtoId"),
+                                "produtoDerivacaoId": item.get("produtoDerivacaoId"),
+                                "produtoNome": item.get("produtoNome"),
+                                "descricao": item.get("descricao"),
+                                "quantidade": item.get("quantidade"),
+                                "valorUnitario": item.get("valorUnitario"),
+                                "valorItem": item.get("valorItem"),
+                                "valorFrete": item.get("valorFrete"),
+                                "marca": item.get("marcaNome"),
+                                "categoria": item.get("categoria"),
+                                "linkProduto": item.get("linkProduto")
+                            })
+                    return itens 
+                elif resp.status == 429:
+                    delay = random.uniform(1.0, 2.0) * (attempt + 1)
+                    logger.warning(f"⚠️ 429 para pedido {codigo_pedido}, esperando {delay:.1f}s")
+                    await asyncio.sleep(delay)
+                else:
+                    logger.warning(f"⚠️ Erro ao buscar itens do pedido {codigo_pedido}: {resp.status}")
+                    break 
+        except Exception as e:
+            logger.error(f"⚠️ Exception ao buscar itens do pedido {codigo_pedido}: {e}")
+            await asyncio.sleep(1 * (attempt + 1)) 
+    return [] 
+
+# -------------------------------
+# 5️⃣ Função para upload no GCS
+# -------------------------------
+def upload_data_to_gcs(data_string: str, bucket_name: str, blob_name: str):
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+
+    try:
+        logger.info(f"🔄 Iniciando upload para gs://{bucket_name}/{blob_name}")
+        blob.upload_from_string(data_string, content_type='text/csv; charset=utf-8-sig')
+        logger.info(f"✅ Upload bem-sucedido!")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Erro ao fazer upload para GCS: {e}")
+        raise e 
+
+# -------------------------------
+# 6️⃣ Função principal para processar pedidos por dia
+# -------------------------------
+async def processar_dia(session, data_inicio, data_fim):
+    pedidos = await buscar_pedidos(session, data_inicio, data_fim)
+    logger.info(f"📌 Total de pedidos: {len(pedidos)}")
+
+    tarefas = []
+    todos_itens = []
+    for pedido in pedidos:
+        tarefas.append(buscar_itens(session, pedido))
+        if len(tarefas) >= MAX_CONCURRENT:
+            resultados = await asyncio.gather(*tarefas)
+            tarefas = []
+            for sublist in resultados:
+                if sublist:
+                    todos_itens.extend(sublist)
+
+    if tarefas:
+        resultados = await asyncio.gather(*tarefas)
+        for sublist in resultados:
+            if sublist:
+                todos_itens.extend(sublist)
+
+    return todos_itens
+
+# -------------------------------
+# 7️⃣ Rodar todo o período
+# -------------------------------
+async def executar_job():
+    async with aiohttp.ClientSession() as session:
+        inicio = datetime.strptime(DATA_INICIO, "%Y-%m-%d")
+        fim = datetime.strptime(DATA_FIM, "%Y-%m-%d")
+        delta = timedelta(days=1)
+
+        dia_atual = inicio
+        todos_itens_periodo = []
+        
+        logger.info(f"🚀 Iniciando extração de {DATA_INICIO} até {DATA_FIM}")
+
+        while dia_atual <= fim:
+            data_str = dia_atual.strftime("%Y-%m-%d")
+            logger.info(f"\n🔹 Dia: {data_str}")
+            itens_dia = await processar_dia(session, data_str, data_str)
+            todos_itens_periodo.extend(itens_dia)
+            dia_atual += delta
+
+        if todos_itens_periodo:
+            df_itens = pd.DataFrame(todos_itens_periodo)
+            logger.info(f"📂 Total de {len(df_itens)} itens. Gerando CSV.")
+
+            csv_buffer = io.StringIO()
+            df_itens.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+            csv_string = csv_buffer.getvalue()
+
+            blob_path = f"{GCS_FOLDER_NAME}/{GCS_FILE_NAME}"
+            upload_data_to_gcs(csv_string, GCS_BUCKET_NAME, blob_path)
+        else:
+            logger.warning("⚠ Nenhum dado encontrado.")
+
+if __name__ == "__main__":
+    asyncio.run(executar_job())
