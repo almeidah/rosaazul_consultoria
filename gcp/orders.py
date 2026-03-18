@@ -45,7 +45,7 @@ DATA_INICIO_STR = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%
 DATA_FIM_STR    = datetime.today().strftime("%Y-%m-%d")
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
-GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "meujeans")
+GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")
 GCS_FILE_NAME = "orders.csv"
 
 # -------------------------------
@@ -54,9 +54,71 @@ GCS_FILE_NAME = "orders.csv"
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 # -------------------------------
-# 4️⃣ Função para buscar uma página
+# 4️⃣ Função para buscar o detalhe completo de um pedido
 # -------------------------------
-async def buscar_pagina(session, page, data_inicio, data_fim):
+async def buscar_detalhe_pedido(session, codigo_pedido):
+    detalhe_url = f"{BASE_URL}/v2/site/pedido/{codigo_pedido}"
+    
+    for attempt in range(RETRY_ATTEMPTS):
+        async with semaphore:
+            try:
+                async with session.get(detalhe_url, 
+                                       auth=aiohttp.BasicAuth(USER, PASS), 
+                                       timeout=REQUEST_TIMEOUT,
+                                       ssl=False) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        pedido_data = data.get("data", {})
+                        
+                        return {
+                            "codigo": codigo_pedido,
+                            "dataHora": pedido_data.get("dataHora"),
+                            "situacao": pedido_data.get("situacao"),
+                            "situacaoNome": pedido_data.get("situacaoNome"),
+                            "dataHoraSituacao": pedido_data.get("dataHoraSituacao"),
+                            "vendedor": pedido_data.get("vendedor"),
+                            "apelidoVendedor": pedido_data.get("apelidoVendedor"),
+                            "canalVenda": pedido_data.get("canalVenda"),
+                            "formaPagamento": pedido_data.get("formaPagamento"),
+                            "pessoaId": pedido_data.get("pessoaId"),
+                            "pessoaNome": pedido_data.get("pessoaNome"),
+                            "pessoaCpfCnpj": pedido_data.get("pessoaCpfCnpj"),
+                            "pessoaEmail": pedido_data.get("pessoaEmail"),
+                            "pessoaTelefone": pedido_data.get("pessoaTelefone"),
+                            "valorTotal": pedido_data.get("valorTotal"),
+                            "valorFrete": pedido_data.get("valorFrete"),
+                            "valorDesconto": pedido_data.get("valorDesconto"),
+                            "valorJuros": pedido_data.get("valorJuros"),
+                            "valorOutrasDespesas": pedido_data.get("valorOutrasDespesas"),
+                            "nfeNumero": pedido_data.get("nfeNumero"),
+                            "nfeSerie": pedido_data.get("nfeSerie"),
+                            "nfeChave": pedido_data.get("nfeChave"),
+                            "transportadora": pedido_data.get("transportadora"),
+                            "transportadoraNome": pedido_data.get("transportadoraNome"),
+                            "servicoEnvio": pedido_data.get("servicoEnvio"),
+                            "codigoRastreamento": pedido_data.get("codigoRastreamento"),
+                            "dataPrevisaoEntrega": pedido_data.get("dataPrevisaoEntrega"),
+                            "dataEntrega": pedido_data.get("dataEntrega"),
+                            "enderecoLogradouro": pedido_data.get("enderecoLogradouro"),
+                            "enderecoNumero": pedido_data.get("enderecoNumero"),
+                            "enderecoBairro": pedido_data.get("enderecoBairro"),
+                            "enderecoCidade": pedido_data.get("enderecoCidade"),
+                            "enderecoUf": pedido_data.get("enderecoUf"),
+                            "enderecoCep": pedido_data.get("enderecoCep")
+                        }
+                    elif resp.status == 429:
+                        delay = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** attempt) + random.random())
+                        await asyncio.sleep(delay)
+                    else:
+                        return None
+            except Exception:
+                await asyncio.sleep(BASE_RETRY_DELAY)
+    return None
+
+# -------------------------------
+# 5️⃣ Função para buscar uma página da lista
+# -------------------------------
+async def buscar_pagina_lista(session, page, data_inicio, data_fim):
     params = {
         "dataHora[gte]": data_inicio,
         "dataHora[lte]": data_fim,
@@ -66,52 +128,21 @@ async def buscar_pagina(session, page, data_inicio, data_fim):
         "orderDirection": "asc"
     }
 
-    tentativas = 0
-    while tentativas < RETRY_ATTEMPTS:
-        async with semaphore:
-            try:
-                async with session.get(f"{BASE_URL}/v2/site/pedido",
-                                       auth=aiohttp.BasicAuth(USER, PASS),
-                                       params=params,
-                                       timeout=REQUEST_TIMEOUT,
-                                       ssl=False) as resp:
-                    if resp.status == 200:
-                        result = await resp.json()
-                        items = result.get("data", {}).get("items", [])
-                        has_more = result.get("data", {}).get("has_more", False)
-                        logger.info(f"✅ Página {page} carregada ({len(items)} pedidos)")
-                        return items, has_more
-                    elif resp.status == 429:
-                        delay = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** tentativas) + random.random())
-                        logger.warning(f"⚠️ 429 na página {page}, esperando {delay:.1f}s")
-                        await asyncio.sleep(delay)
-                        tentativas += 1
-                    else:
-                        logger.error(f"❌ Erro {resp.status} na página {page}")
-                        return [], False
-            except Exception as e:
-                logger.warning(f"⚠️ Erro na página {page} ({tentativas+1}/{RETRY_ATTEMPTS}): {e}")
-                await asyncio.sleep(BASE_RETRY_DELAY)
-                tentativas += 1
-    return [], False
-
-# -------------------------------
-# 5️⃣ Função para buscar todos os pedidos
-# -------------------------------
-async def buscar_todos_pedidos(data_inicio, data_fim):
-    todos_pedidos = []
-    page = 1
-    has_more = True
-
-    async with aiohttp.ClientSession() as session:
-        while has_more:
-            items, has_more = await buscar_pagina(session, page, data_inicio, data_fim)
-            if items:
-                todos_pedidos.extend(items)
-            else:
-                break
-            page += 1
-    return todos_pedidos
+    async with semaphore:
+        try:
+            async with session.get(f"{BASE_URL}/v2/site/pedido",
+                                   auth=aiohttp.BasicAuth(USER, PASS),
+                                   params=params,
+                                   timeout=REQUEST_TIMEOUT,
+                                   ssl=False) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    items = result.get("data", {}).get("items", [])
+                    has_more = result.get("data", {}).get("has_more", False)
+                    return items, has_more
+                return [], False
+        except Exception:
+            return [], False
 
 # -------------------------------
 # 6️⃣ Função para upload no GCS
@@ -134,21 +165,39 @@ def upload_data_to_gcs(data_string: str, bucket_name: str, blob_name: str):
 # 7️⃣ Função Principal do Módulo
 # -------------------------------
 async def executar_job():
-    logger.info(f"🚀 Buscando pedidos de {DATA_INICIO_STR} até {DATA_FIM_STR}...")
-    todos_pedidos = await buscar_todos_pedidos(DATA_INICIO_STR, DATA_FIM_STR)
+    async with aiohttp.ClientSession() as session:
+        logger.info(f"🚀 Buscando todos os pedidos de {DATA_INICIO_STR} até {DATA_FIM_STR}...")
+        
+        page = 1
+        has_more = True
+        todos_codigos = []
 
-    if todos_pedidos:
-        df = pd.DataFrame(todos_pedidos)
-        logger.info(f"📂 {len(df)} pedidos processados. Gerando CSV.")
+        while has_more:
+            items, has_more = await buscar_pagina_lista(session, page, DATA_INICIO_STR, DATA_FIM_STR)
+            for item in items:
+                todos_codigos.append(item["codigo"])
+            logger.info(f"✅ Lista: Página {page} processada. Acumulado: {len(todos_codigos)} pedidos.")
+            page += 1
+            if not items: break
 
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False, encoding="utf-8-sig") 
-        csv_string = csv_buffer.getvalue()
+        logger.info(f"📑 Buscando detalhes completos de {len(todos_codigos)} pedidos...")
+        tarefas = [buscar_detalhe_pedido(session, cod) for cod in todos_codigos]
+        resultados = await asyncio.gather(*tarefas)
+        
+        pedidos_completos = [r for r in resultados if r is not None]
+        
+        if pedidos_completos:
+            df = pd.DataFrame(pedidos_completos)
+            logger.info(f"📂 {len(df)} pedidos processados. Gerando CSV.")
 
-        blob_path = f"{GCS_FOLDER_NAME}/{GCS_FILE_NAME}"
-        upload_data_to_gcs(csv_string, GCS_BUCKET_NAME, blob_path)
-    else:
-        logger.warning("⚠️ Nenhum pedido encontrado.")
+            csv_buffer = io.StringIO()
+            df.to_csv(csv_buffer, index=False, encoding="utf-8-sig") 
+            csv_string = csv_buffer.getvalue()
+
+            blob_path = f"{GCS_FOLDER_NAME}/{GCS_FILE_NAME}"
+            upload_data_to_gcs(csv_string, GCS_BUCKET_NAME, blob_path)
+        else:
+            logger.warning("⚠️ Nenhum pedido encontrado.")
 
 if __name__ == "__main__":
     asyncio.run(executar_job())

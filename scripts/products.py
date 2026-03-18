@@ -33,8 +33,8 @@ MAX_CONCURRENT_REQUESTS = 5
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 # Configurações do Google Cloud Storage
-GCS_BUCKET_NAME = "pinkdata" # Seu bucket no GCS
-GCS_FOLDER_NAME = "magazord" # Sua pasta dentro do bucket (prefíxo de objeto)
+GCS_BUCKET_NAME = "magazord-bd" # Seu bucket no GCS
+GCS_FOLDER_NAME = "rosaazul" # Sua pasta dentro do bucket (prefíxo de objeto)
 
 # -------------------------------
 # 3️⃣ Função para buscar página de produtos
@@ -133,7 +133,7 @@ async def main():
         # Define o nome do arquivo fixo para sobrescrever
         filename_local = "products.csv" 
 
-        output_dir = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Pink Dream/pinkdream-code/data/processed"
+        output_dir = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul_consultoria/data/processed"
         os.makedirs(output_dir, exist_ok=True)
         full_local_path = os.path.join(output_dir, filename_local)
         

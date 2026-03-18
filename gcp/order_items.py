@@ -41,7 +41,7 @@ DATA_INICIO = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%m-%d
 DATA_FIM    = datetime.today().strftime("%Y-%m-%d")
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
-GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "meujeans")
+GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")
 GCS_FILE_NAME = "order_items.csv" 
 
 # -------------------------------
@@ -93,12 +93,52 @@ async def buscar_itens(session, pedido):
                 if resp.status == 200:
                     data = await resp.json()
                     pedido_data = data.get("data", {})
+                    
+                    # Extração de campos do cabeçalho (Header) do Pedido
+                    header_fields = {
+                        "codigoPedido": codigo_pedido,
+                        "dataHora": pedido_data.get("dataHora"),
+                        "situacao": pedido_data.get("situacao"),
+                        "situacaoNome": pedido_data.get("situacaoNome"),
+                        "dataHoraSituacao": pedido_data.get("dataHoraSituacao"),
+                        "vendedor": pedido_data.get("vendedor"),
+                        "apelidoVendedor": pedido_data.get("apelidoVendedor"),
+                        "canalVenda": pedido_data.get("canalVenda"),
+                        "formaPagamento": pedido_data.get("formaPagamento"),
+                        "pessoaId": pedido_data.get("pessoaId"),
+                        "cliente": pedido_data.get("pessoaNome"),
+                        "pessoaCpfCnpj": pedido_data.get("pessoaCpfCnpj"),
+                        "pessoaEmail": pedido_data.get("pessoaEmail"),
+                        "pessoaTelefone": pedido_data.get("pessoaTelefone"),
+                        "valorTotalPedido": pedido_data.get("valorTotal"),
+                        "valorFretePedido": pedido_data.get("valorFrete"),
+                        "valorDescontoPedido": pedido_data.get("valorDesconto"),
+                        "valorJurosPedido": pedido_data.get("valorJuros"),
+                        "valorOutrasDespesasPedido": pedido_data.get("valorOutrasDespesas"),
+                        "nfeNumero": pedido_data.get("nfeNumero"),
+                        "nfeSerie": pedido_data.get("nfeSerie"),
+                        "nfeChave": pedido_data.get("nfeChave"),
+                        "transportadora": pedido_data.get("transportadora"),
+                        "transportadoraNome": pedido_data.get("transportadoraNome"),
+                        "servicoEnvio": pedido_data.get("servicoEnvio"),
+                        "codigoRastreamento": pedido_data.get("codigoRastreamento"),
+                        "dataPrevisaoEntrega": pedido_data.get("dataPrevisaoEntrega"),
+                        "dataEntrega": pedido_data.get("dataEntrega"),
+                        "enderecoLogradouro": pedido_data.get("enderecoLogradouro"),
+                        "enderecoNumero": pedido_data.get("enderecoNumero"),
+                        "enderecoComplemento": pedido_data.get("enderecoComplemento"),
+                        "enderecoBairro": pedido_data.get("enderecoBairro"),
+                        "enderecoCidade": pedido_data.get("enderecoCidade"),
+                        "enderecoUf": pedido_data.get("enderecoUf"),
+                        "enderecoCep": pedido_data.get("enderecoCep")
+                    }
+
+                    # Varre os itens dentro do rastreio
                     for rastreio in pedido_data.get("arrayPedidoRastreio", []):
                         for item in rastreio.get("pedidoItem", []):
-                            itens.append({
-                                "codigoPedido": codigo_pedido,
-                                "dataHora": pedido_data.get("dataHora"),
-                                "cliente": pedido_data.get("pessoaNome"),
+                            # Combina os dados do cabeçalho com os dados do item
+                            item_completo = header_fields.copy()
+                            item_completo.update({
                                 "produtoDerivacaoCodigo": item.get("produtoDerivacaoCodigo"), 
                                 "produtoId": item.get("produtoId"),
                                 "produtoDerivacaoId": item.get("produtoDerivacaoId"),
@@ -107,11 +147,12 @@ async def buscar_itens(session, pedido):
                                 "quantidade": item.get("quantidade"),
                                 "valorUnitario": item.get("valorUnitario"),
                                 "valorItem": item.get("valorItem"),
-                                "valorFrete": item.get("valorFrete"),
+                                "valorFreteItem": item.get("valorFrete"),
                                 "marca": item.get("marcaNome"),
                                 "categoria": item.get("categoria"),
                                 "linkProduto": item.get("linkProduto")
                             })
+                            itens.append(item_completo)
                     return itens 
                 elif resp.status == 429:
                     delay = random.uniform(1.0, 2.0) * (attempt + 1)

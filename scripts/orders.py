@@ -4,9 +4,10 @@ import aiohttp
 import pandas as pd
 import random
 import logging
+import io
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from google.cloud import storage # Importar google.cloud.storage
+from google.cloud import storage 
 
 # -------------------------------
 # 0️⃣ Logging
@@ -14,9 +15,6 @@ from google.cloud import storage # Importar google.cloud.storage
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler()  # Apenas console, sem arquivo
-    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -31,153 +29,189 @@ PASS = os.getenv("MAGAZORD_PASS")
 # -------------------------------
 # 2️⃣ Configurações
 # -------------------------------
-SITUACOES_APROVADO = [4, 5, 6, 7, 8]  # 👉 múltiplos status
+SITUACOES_APROVADO = [4, 5, 6, 7, 8]
 LIMIT = 100
-MAX_CONCURRENT_REQUESTS = 4
-RETRY_ATTEMPTS = 5
-BASE_RETRY_DELAY = 1.0
-MAX_RETRY_DELAY = 30.0
-REQUEST_TIMEOUT = 30
+MAX_CONCURRENT = 4 
 
-DATA_INICIO_STR = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")  # 30 dias atrás
-DATA_FIM_STR    = datetime.today().strftime("%Y-%m-%d")  # Hoje
+# Período a ser consultado
+DIAS_ATRAS = 5
+DATA_INICIO = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%m-%d")
+DATA_FIM    = datetime.today().strftime("%Y-%m-%d")
 
-OUTPUT_DIR = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Pink Dream/pinkdream-code/data/processed"
-# Não é mais necessário criar a pasta aqui, pois faremos isso dentro do main antes de salvar o arquivo localmente.
-# os.makedirs(OUTPUT_DIR, exist_ok=True) 
+# Pasta destino local
+PASTA_DESTINO = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul_consultoria/data/processed"
 
 # Configurações do Google Cloud Storage
-GCS_BUCKET_NAME = "pinkdata" # Seu bucket no GCS
-GCS_FOLDER_NAME = "magazord" # Sua pasta dentro do bucket (prefíxo de objeto)
+GCS_BUCKET_NAME = "magazord-bd"
+GCS_FOLDER_NAME = "rosaazul"
 
 # -------------------------------
-# 3️⃣ Semáforo
+# 3️⃣ Função para buscar a lista de pedidos de um dia
 # -------------------------------
-semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-
-# -------------------------------
-# 4️⃣ Função para buscar uma página
-# -------------------------------
-async def buscar_pagina(session, page, data_inicio, data_fim):
-    params = {
-        "dataHora[gte]": data_inicio,
-        "dataHora[lte]": data_fim,
-        "situacao": ",".join(map(str, SITUACOES_APROVADO)),  # 👉 envia separado por vírgulas
-        "limit": LIMIT,
-        "page": page,
-        "orderDirection": "asc"
-    }
-
-    tentativas = 0
-    while tentativas < RETRY_ATTEMPTS:
-        async with semaphore:
-            try:
-                async with session.get(f"{BASE_URL}/v2/site/pedido",
-                                       auth=aiohttp.BasicAuth(USER, PASS),
-                                       params=params,
-                                       timeout=REQUEST_TIMEOUT) as resp:
-                    if resp.status == 200:
-                        result = await resp.json()
-                        items = result["data"]["items"]
-                        has_more = result["data"].get("has_more", False)
-                        logger.info(f"✅ Página {page} carregada ({len(items)} pedidos)")
-                        return items, has_more
-                    elif resp.status == 429:
-                        delay = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** tentativas) + random.random())
-                        logger.warning(f"⚠️ 429 na página {page}, esperando {delay:.1f}s antes de tentar novamente ({tentativas+1}/{RETRY_ATTEMPTS})")
-                        await asyncio.sleep(delay)
-                        tentativas += 1
-                    else:
-                        logger.error(f"❌ Erro {resp.status} na página {page}: {await resp.text()}")
-                        return [], False
-            except asyncio.TimeoutError:
-                logger.warning(f"⚠️ Timeout na página {page} ({tentativas+1}/{RETRY_ATTEMPTS})")
-                await asyncio.sleep(BASE_RETRY_DELAY)
-                tentativas += 1
-            except aiohttp.ClientError as e:
-                logger.error(f"❌ Erro de conexão na página {page}: {e}")
-                await asyncio.sleep(BASE_RETRY_DELAY)
-                tentativas += 1
-    logger.error(f"❌ Falha ao buscar página {page} após {RETRY_ATTEMPTS} tentativas")
-    return [], False
-
-# -------------------------------
-# 5️⃣ Função para buscar todos os pedidos
-# -------------------------------
-async def buscar_todos_pedidos(data_inicio, data_fim):
+async def buscar_pedidos(session, data_inicio, data_fim):
     todos_pedidos = []
     page = 1
-    has_more = True
-
-    async with aiohttp.ClientSession() as session:
-        while has_more:
-            items, has_more = await buscar_pagina(session, page, data_inicio, data_fim)
-            todos_pedidos.extend(items)
-            # Se não houver mais itens mas o has_more ainda for True (erro na API),
-            # ou se a lista de itens estiver vazia, sair do loop.
-            if not items and has_more: 
-                logger.warning(f"⚠ Não foram retornados itens na página {page}, mas a API indicou 'has_more'. Parando para evitar loop infinito.")
-                break
-            if not has_more: # Se a API indicar que não há mais páginas, sair.
-                break
-            page += 1
-
+    while True:
+        params = {
+            "dataHora[gte]": data_inicio,
+            "dataHora[lte]": data_fim,
+            "situacao": ",".join(map(str, SITUACOES_APROVADO)),
+            "limit": LIMIT,
+            "page": page,
+            "orderDirection": "asc"
+        }
+        try:
+            async with session.get(f"{BASE_URL}/v2/site/pedido", 
+                                   auth=aiohttp.BasicAuth(USER, PASS), 
+                                   params=params, 
+                                   ssl=False) as resp:
+                if resp.status != 200:
+                    logger.error(f"❌ Erro ao buscar pedidos na página {page} do dia {data_inicio}: {resp.status}")
+                    break
+                result = await resp.json()
+                pedidos = result.get("data", {}).get("items", [])
+                if not pedidos:
+                    break
+                todos_pedidos.extend(pedidos)
+                logger.info(f"✅ Página {page} carregada ({len(pedidos)} pedidos)")
+                page += 1
+        except Exception as e:
+            logger.error(f"❌ Exceção ao buscar pedidos na página {page}: {e}")
+            break
     return todos_pedidos
 
 # -------------------------------
-# 6️⃣ Função para upload no GCS (mantida dos scripts anteriores)
+# 4️⃣ Função para buscar detalhes de um pedido
+# -------------------------------
+async def buscar_detalhe(session, codigo_pedido):
+    detalhe_url = f"{BASE_URL}/v2/site/pedido/{codigo_pedido}"
+    
+    for attempt in range(3): 
+        try:
+            async with session.get(detalhe_url, auth=aiohttp.BasicAuth(USER, PASS), ssl=False) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    pedido_data = data.get("data", {})
+                    
+                    return {
+                        "codigo": codigo_pedido,
+                        "dataHora": pedido_data.get("dataHora"),
+                        "situacao": pedido_data.get("situacao"),
+                        "situacaoNome": pedido_data.get("situacaoNome"),
+                        "dataHoraSituacao": pedido_data.get("dataHoraSituacao"),
+                        "vendedor": pedido_data.get("vendedor"),
+                        "apelidoVendedor": pedido_data.get("apelidoVendedor"),
+                        "canalVenda": pedido_data.get("canalVenda"),
+                        "formaPagamento": pedido_data.get("formaPagamento"),
+                        "pessoaId": pedido_data.get("pessoaId"),
+                        "pessoaNome": pedido_data.get("pessoaNome"),
+                        "pessoaCpfCnpj": pedido_data.get("pessoaCpfCnpj"),
+                        "pessoaEmail": pedido_data.get("pessoaEmail"),
+                        "pessoaTelefone": pedido_data.get("pessoaTelefone"),
+                        "valorTotal": pedido_data.get("valorTotal"),
+                        "valorFrete": pedido_data.get("valorFrete"),
+                        "valorDesconto": pedido_data.get("valorDesconto"),
+                        "valorJuros": pedido_data.get("valorJuros"),
+                        "valorOutrasDespesas": pedido_data.get("valorOutrasDespesas"),
+                        "nfeNumero": pedido_data.get("nfeNumero"),
+                        "nfeSerie": pedido_data.get("nfeSerie"),
+                        "nfeChave": pedido_data.get("nfeChave"),
+                        "transportadora": pedido_data.get("transportadora"),
+                        "transportadoraNome": pedido_data.get("transportadoraNome"),
+                        "servicoEnvio": pedido_data.get("servicoEnvio"),
+                        "codigoRastreamento": pedido_data.get("codigoRastreamento"),
+                        "dataPrevisaoEntrega": pedido_data.get("dataPrevisaoEntrega"),
+                        "dataEntrega": pedido_data.get("dataEntrega"),
+                        "enderecoLogradouro": pedido_data.get("enderecoLogradouro"),
+                        "enderecoNumero": pedido_data.get("enderecoNumero"),
+                        "enderecoComplemento": pedido_data.get("enderecoComplemento"),
+                        "enderecoBairro": pedido_data.get("enderecoBairro"),
+                        "enderecoCidade": pedido_data.get("enderecoCidade"),
+                        "enderecoUf": pedido_data.get("enderecoUf"),
+                        "enderecoCep": pedido_data.get("enderecoCep")
+                    }
+                elif resp.status == 429:
+                    delay = random.uniform(1.0, 2.0) * (attempt + 1)
+                    await asyncio.sleep(delay)
+                else:
+                    break 
+        except Exception:
+            await asyncio.sleep(1 * (attempt + 1)) 
+    return None
+
+# -------------------------------
+# 5️⃣ Função para upload no GCS
 # -------------------------------
 def upload_file_to_gcs(file_path: str, bucket_name: str, folder_name: str):
-    """
-    Faz o upload de um arquivo para um bucket do Google Cloud Storage.
-    """
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
 
-    # Pega apenas o nome do arquivo do caminho completo
     file_name = os.path.basename(file_path)
-    # Define o blob name como 'pasta/nome_do_arquivo'
     blob_name = f"{folder_name}/{file_name}"
     blob = bucket.blob(blob_name)
 
     try:
-        logger.info(f"🔄 Iniciando upload de '{file_path}' para gs://{bucket_name}/{blob_name}")
+        logger.info(f"🔄 Iniciando upload para gs://{bucket_name}/{blob_name}")
         blob.upload_from_filename(file_path)
-        logger.info(f"✅ Upload bem-sucedido para gs://{bucket_name}/{blob_name}")
+        logger.info(f"✅ Upload bem-sucedido!")
         return True
     except Exception as e:
         logger.error(f"❌ Erro ao fazer upload para GCS: {e}")
         return False
 
+# -------------------------------
+# 6️⃣ Função para processar pedidos de um dia
+# -------------------------------
+async def processar_dia(session, data_inicio, data_fim):
+    pedidos = await buscar_pedidos(session, data_inicio, data_fim)
+    logger.info(f"📌 Total de pedidos do dia {data_inicio}: {len(pedidos)}")
+
+    tarefas = []
+    todos_detalhes = []
+    for p in pedidos:
+        tarefas.append(buscar_detalhe(session, p["codigo"]))
+        if len(tarefas) >= MAX_CONCURRENT:
+            resultados = await asyncio.gather(*tarefas)
+            tarefas = []
+            todos_detalhes.extend([r for r in resultados if r])
+
+    if tarefas:
+        resultados = await asyncio.gather(*tarefas)
+        todos_detalhes.extend([r for r in resultados if r])
+
+    return todos_detalhes
 
 # -------------------------------
-# 7️⃣ Main
+# 7️⃣ Main Loop
 # -------------------------------
 async def main():
-    logger.info(f"🔄 Buscando pedidos aprovados ({SITUACOES_APROVADO}) de {DATA_INICIO_STR} até {DATA_FIM_STR}...")
-    todos_pedidos = await buscar_todos_pedidos(DATA_INICIO_STR, DATA_FIM_STR)
+    async with aiohttp.ClientSession() as session:
+        inicio = datetime.strptime(DATA_INICIO, "%Y-%m-%d")
+        fim = datetime.strptime(DATA_FIM, "%Y-%m-%d")
+        delta = timedelta(days=1)
 
-    if todos_pedidos:
-        df = pd.DataFrame(todos_pedidos)
-        
-        # Define o nome do arquivo fixo para sobrescrever
-        filename_local = "orders.csv"
-        
-        # Garante que a pasta de destino local exista
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        full_local_path = os.path.join(OUTPUT_DIR, filename_local)
-        
-        df.to_csv(full_local_path, index=False, encoding="utf-8-sig")
-        logger.info(f"📂 {len(df)} pedidos salvos localmente em {full_local_path}")
+        dia_atual = inicio
+        todos_pedidos_periodo = []
 
-        # --- Chamada para upload no GCS ---
-        upload_file_to_gcs(full_local_path, GCS_BUCKET_NAME, GCS_FOLDER_NAME)
-        # --------------------------------
-    else:
-        logger.warning("⚠️ Nenhum pedido encontrado com os status definidos para o período.")
+        while dia_atual <= fim:
+            data_str = dia_atual.strftime("%Y-%m-%d")
+            logger.info(f"\n🔹 Processando pedidos do dia {data_str}")
+            detalhes_dia = await processar_dia(session, data_str, data_str)
+            todos_pedidos_periodo.extend(detalhes_dia)
+            dia_atual += delta
 
-# -------------------------------
-# 8️⃣ Executar
-# -------------------------------
+        if todos_pedidos_periodo:
+            df = pd.DataFrame(todos_pedidos_periodo)
+            filename_local = "orders.csv"
+            os.makedirs(PASTA_DESTINO, exist_ok=True)
+            full_local_path = os.path.join(PASTA_DESTINO, filename_local)
+            
+            df.to_csv(full_local_path, index=False, encoding="utf-8-sig")
+            logger.info(f"\n📂 Total de {len(df)} pedidos salvos em {full_local_path}")
+
+            upload_file_to_gcs(full_local_path, GCS_BUCKET_NAME, GCS_FOLDER_NAME)
+        else:
+            logger.warning("⚠ Nenhum pedido encontrado.")
+
 if __name__ == "__main__":
     asyncio.run(main())

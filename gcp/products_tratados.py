@@ -36,7 +36,7 @@ MAX_CONCURRENT_REQUESTS = 5
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
-GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "meujeans")
+GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")
 GCS_FILE_NAME = "product_derivation.csv" 
 
 # -------------------------------

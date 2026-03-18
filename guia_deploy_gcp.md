@@ -30,7 +30,7 @@ gcloud artifacts repositories create magazord-images \
 Execute este comando dentro da pasta `gcp/`. Ele criará uma "caixa" específica para o cliente dentro do seu repositório:
 
 ```bash
-gcloud builds submit --tag us-east1-docker.pkg.dev/sandbox-magazord/magazord-images/meujeans:v1 .
+gcloud builds submit --tag us-east1-docker.pkg.dev/sandbox-magazord/magazord-images/rosaazul:v1 .
 ```
 
 ---
@@ -40,12 +40,12 @@ Para cada cliente novo, você cria um Job diferente usando a MESMA imagem.
 
 ### Cliente: Meu Jeans
 ```bash
-gcloud run jobs create extrator-meujeans \
-    --image us-east1-docker.pkg.dev/sandbox-magazord/magazord-images/extrator-magazord:v1 \
+gcloud run jobs create extrator-rosaazul \
+    --image us-east1-docker.pkg.dev/sandbox-magazord/magazord-images/rosaazul:v1 \
     --region us-east1 \
     --memory 512Mi \
     --cpu 1 \
-    --set-env-vars "MAGAZORD_BASE_URL=https://meujeans.painel.magazord.com.br/api" \
+    --set-env-vars "MAGAZORD_BASE_URL=https://rosaazul.painel.magazord.com.br/api" \
     --set-env-vars "MAGAZORD_USER=..." \
     --set-env-vars "MAGAZORD_PASS=..." \
     --set-env-vars "DAYS_AGO=30" \
