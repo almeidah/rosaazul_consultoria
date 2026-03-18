@@ -21,8 +21,8 @@ def test_connection():
     user_str = str(username)
     print(f"Usuário: {user_str[:10]}...") 
 
-    # Endpoint de exemplo (Produtos)
-    endpoint = f"{base_url}/v2/site/produto"
+    # Endpoint de exemplo (Pedidos)
+    endpoint = f"{base_url}/v2/site/pedido"
     params = {"limit": 1}
 
     try:
