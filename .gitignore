@@ -1,4 +1,5 @@
 # Ignorar ambiente virtual
+.venv/
 venv/
 
 # Ignorar arquivos de configuração local
@@ -11,3 +12,7 @@ __pycache__/
 
 # Ignorar logs
 logs/
+
+# Ignorar dados processados e arquivos CSV grandes
+data/
+*.csv
