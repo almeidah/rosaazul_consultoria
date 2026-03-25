@@ -33,7 +33,7 @@ if not all([BASE_URL, USER, PASS]):
 # -------------------------------
 LIMIT = 100
 REQUEST_TIMEOUT = 30
-MAX_CONCURRENT = 5
+MAX_CONCURRENT = 2
 semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
 # 🕒 Configuração de Incremental
@@ -85,7 +85,7 @@ async def get_category_map(session):
 # -------------------------------
 async def fetch_produto_detail(session, codigo):
     url = f"{BASE_URL}/v2/site/produto/{codigo}"
-    for attempt in range(3):
+    for attempt in range(5):
         async with semaphore:
             try:
                 async with session.get(url, auth=aiohttp.BasicAuth(USER, PASS), timeout=REQUEST_TIMEOUT, ssl=False) as resp:

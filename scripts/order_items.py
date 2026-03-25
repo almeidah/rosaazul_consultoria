@@ -30,7 +30,7 @@ PASS = os.getenv("MAGAZORD_PASS")
 # -------------------------------
 SITUACOES_APROVADO = [4, 5, 6, 7, 8]
 LIMIT = 100
-MAX_CONCURRENT = 4
+MAX_CONCURRENT = 2
 
 # 📅 Período a ser consultado (Ajuste para a carga inicial desejada)
 DIAS_ATRAS = 3
@@ -84,7 +84,7 @@ async def buscar_itens(session, pedido):
     detalhe_url = f"{BASE_URL}/v2/site/pedido/{codigo_pedido}"
     itens = []
 
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             async with session.get(detalhe_url, auth=aiohttp.BasicAuth(USER, PASS), ssl=False) as resp:
                 if resp.status == 200:

@@ -32,7 +32,7 @@ if not all([BASE_URL, USER, PASS]):
 # -------------------------------
 LIMIT = 100
 REQUEST_TIMEOUT = 30
-MAX_CONCURRENT_REQUESTS = 5
+MAX_CONCURRENT_REQUESTS = 2
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
