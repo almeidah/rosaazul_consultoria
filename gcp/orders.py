@@ -120,8 +120,8 @@ async def buscar_detalhe_pedido(session, codigo_pedido):
 # -------------------------------
 async def buscar_pagina_lista(session, page, data_inicio, data_fim):
     params = {
-        "dataHora[gte]": data_inicio,
-        "dataHora[lte]": data_fim,
+        "dataHoraUltimaAlteracaoSituacao[gte]": data_inicio,
+        "dataHoraUltimaAlteracaoSituacao[lte]": data_fim,
         "situacao": ",".join(map(str, SITUACOES_APROVADO)),
         "limit": LIMIT,
         "page": page,

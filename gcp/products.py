@@ -4,7 +4,7 @@ import aiohttp
 import pandas as pd
 import logging
 import io 
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.cloud import storage 
 
 # -------------------------------
@@ -35,8 +35,12 @@ REQUEST_TIMEOUT = 30
 MAX_CONCURRENT_REQUESTS = 5
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
+# 🕒 Configuração de Incremental
+DAYS_AGO_UPDATE = int(os.getenv("DAYS_AGO_UPDATE", 3))
+DATE_FILTER = (datetime.now() - timedelta(days=DAYS_AGO_UPDATE)).strftime("%Y-%m-%d %H:%M:%S")
+
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
-GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "meujeans")
+GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")
 GCS_FILE_NAME = "produtos.csv" 
 
 # -------------------------------
@@ -48,7 +52,8 @@ async def fetch_produto_page(session, page: int):
         "limit": LIMIT,
         "page": page,
         "order": "id",
-        "orderDirection": "asc"
+        "orderDirection": "asc",
+        "dataAtualizacaoInicio": DATE_FILTER
     }
 
     try:
@@ -111,7 +116,7 @@ def upload_data_to_gcs(data_string: str, bucket_name: str, blob_name: str):
 # 6️⃣ Função Principal do Módulo
 # -------------------------------
 async def executar_job():
-    logger.info("🚀 Buscando produtos...")
+    logger.info(f"🚀 Buscando produtos (>= {DATE_FILTER})...")
     items = await fetch_all_produtos()
 
     if items:

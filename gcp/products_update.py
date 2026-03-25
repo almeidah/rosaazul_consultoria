@@ -37,7 +37,7 @@ MAX_CONCURRENT = 5
 semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
 # 🕒 Configuração de Incremental
-DAYS_AGO_UPDATE = int(os.getenv("DAYS_AGO_UPDATE", 1))
+DAYS_AGO_UPDATE = int(os.getenv("DAYS_AGO_UPDATE", 3))
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
 GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")
@@ -112,9 +112,9 @@ async def fetch_updated_product_codes(session, date_filter):
         params = {
             "limit": LIMIT, 
             "page": page, 
-            "order": "id", 
+            "order": "dataAtualizacao", 
             "orderDirection": "desc",
-            "dataAtualizacao[gte]": date_filter
+            "dataAtualizacaoInicio": date_filter
         }
         try:
             async with session.get(url, auth=aiohttp.BasicAuth(USER, PASS), params=params, ssl=False) as resp:
