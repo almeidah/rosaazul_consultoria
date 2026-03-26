@@ -3,6 +3,7 @@ import pandas as pd
 import asyncio
 import aiohttp
 import random
+import glob
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from google.cloud import storage 
@@ -214,7 +215,53 @@ async def processar_dia(session, data_inicio, data_fim):
     return todos_itens
 
 # -------------------------------
-# 7️⃣ Rodar todo o período
+# 7️⃣ Funções auxiliares para arquivos mensais
+# -------------------------------
+def salvar_arquivo_mensal(dados, mes, pasta_destino, prefixo):
+    if not dados:
+        return
+    df = pd.DataFrame(dados)
+    os.makedirs(pasta_destino, exist_ok=True)
+    arquivo = os.path.join(pasta_destino, f"{prefixo}_{mes}.csv")
+    df.to_csv(arquivo, index=False, encoding="utf-8-sig")
+    logger.info(f"📂 Arquivo mensal salvo: {arquivo} com {len(df)} registros.")
+
+def juntar_arquivos_e_subir(pasta_destino, prefixo, arquivo_final, bucket_name, folder_name):
+    padrao = os.path.join(pasta_destino, f"{prefixo}_*.csv")
+    arquivos = glob.glob(padrao)
+    
+    if not arquivos:
+        logger.warning("⚠ Nenhum arquivo mensal encontrado para juntar.")
+        return
+        
+    logger.info(f"🔄 Juntando {len(arquivos)} arquivos mensais...")
+    dfs = []
+    for arq in sorted(arquivos):
+        try:
+            dfs.append(pd.read_csv(arq))
+        except Exception as e:
+            logger.error(f"❌ Erro ao ler {arq}: {e}")
+            
+    if dfs:
+        df_final = pd.concat(dfs, ignore_index=True)
+        caminho_final = os.path.join(pasta_destino, arquivo_final)
+        df_final.to_csv(caminho_final, index=False, encoding="utf-8-sig")
+        logger.info(f"✅ Arquivo final consolidado gerado: {caminho_final} com {len(df_final)} registros totais.")
+        
+        # Subir para GCS
+        sucesso = upload_file_to_gcs(caminho_final, bucket_name, folder_name)
+        
+        # Apagar os arquivos mensais após sucesso
+        if sucesso:
+            for arq in arquivos:
+                try:
+                    os.remove(arq)
+                except Exception as e:
+                    logger.error(f"❌ Erro ao excluir {arq}: {e}")
+            logger.info("🗑️ Arquivos mensais temporários apagados.")
+
+# -------------------------------
+# 8️⃣ Rodar todo o período
 # -------------------------------
 async def main():
     async with aiohttp.ClientSession() as session:
@@ -223,27 +270,31 @@ async def main():
         delta = timedelta(days=1)
 
         dia_atual = inicio
-        todos_itens_periodo = []
+        mes_atual = inicio.strftime("%Y-%m")
+        itens_mes_atual = []
 
         while dia_atual <= fim:
+            mes_dia_atual = dia_atual.strftime("%Y-%m")
+            
+            # Mudou de mês, salva o que acumulou no mês anterior
+            if mes_dia_atual != mes_atual:
+                if itens_mes_atual:
+                    salvar_arquivo_mensal(itens_mes_atual, mes_atual, PASTA_DESTINO, "order_items_temp")
+                mes_atual = mes_dia_atual
+                itens_mes_atual = []
+
             data_inicio = dia_atual.strftime("%Y-%m-%d")
             logger.info(f"\n🔹 Processando pedidos do dia {data_inicio}")
             itens_dia = await processar_dia(session, data_inicio, data_inicio)
-            todos_itens_periodo.extend(itens_dia)
+            itens_mes_atual.extend(itens_dia)
             dia_atual += delta
 
-        if todos_itens_periodo:
-            df_itens = pd.DataFrame(todos_itens_periodo)
-            filename_local = "order_items.csv" 
-            os.makedirs(PASTA_DESTINO, exist_ok=True)
-            full_local_path = os.path.join(PASTA_DESTINO, filename_local)
-            
-            df_itens.to_csv(full_local_path, index=False, encoding="utf-8-sig")
-            logger.info(f"\n📂 Total de {len(df_itens)} itens salvos em {full_local_path}")
+        # Salva o último mês residual
+        if itens_mes_atual:
+            salvar_arquivo_mensal(itens_mes_atual, mes_atual, PASTA_DESTINO, "order_items_temp")
 
-            upload_file_to_gcs(full_local_path, GCS_BUCKET_NAME, GCS_FOLDER_NAME)
-        else:
-            logger.warning("⚠ Nenhum item de pedido encontrado.")
+        # Concatena os meses gerados e sobe para o GCS
+        juntar_arquivos_e_subir(PASTA_DESTINO, "order_items_temp", "order_items.csv", GCS_BUCKET_NAME, GCS_FOLDER_NAME)
 
 if __name__ == "__main__":
     asyncio.run(main())
