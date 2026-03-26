@@ -70,41 +70,48 @@ async def buscar_detalhe_pedido(session, codigo_pedido):
                         data = await resp.json()
                         pedido_data = data.get("data", {})
                         
+                        # --- Extraindo Rastreamento e Nota Fiscal (do primeiro pacote) ---
+                        rastreios = pedido_data.get("arrayPedidoRastreio", [])
+                        rastreio_1 = rastreios[0] if rastreios else {}
+                        nfs = rastreio_1.get("pedidoNotaFiscal", [])
+                        nf_1 = nfs[0] if nfs else {}
+
                         return {
                             "codigo": codigo_pedido,
                             "dataHora": pedido_data.get("dataHora"),
-                            "situacao": pedido_data.get("situacao"),
-                            "situacaoNome": pedido_data.get("situacaoNome"),
-                            "dataHoraSituacao": pedido_data.get("dataHoraSituacao"),
-                            "vendedor": pedido_data.get("vendedor"),
-                            "apelidoVendedor": pedido_data.get("apelidoVendedor"),
-                            "canalVenda": pedido_data.get("canalVenda"),
-                            "formaPagamento": pedido_data.get("formaPagamento"),
+                            "situacao": pedido_data.get("pedidoSituacao"),
+                            "situacaoNome": pedido_data.get("pedidoSituacaoDescricao"),
+                            "dataHoraSituacao": pedido_data.get("dataHoraUltimaAlteracaoSituacao"), # Só na lista
+                            "vendedor": pedido_data.get("codigoVendedor"),
+                            "apelidoVendedor": None, # Não aplicável
+                            "canalVenda": pedido_data.get("origem"),
+                            "formaPagamento": pedido_data.get("formaPagamentoNome"),
                             "pessoaId": pedido_data.get("pessoaId"),
                             "pessoaNome": pedido_data.get("pessoaNome"),
                             "pessoaCpfCnpj": pedido_data.get("pessoaCpfCnpj"),
                             "pessoaEmail": pedido_data.get("pessoaEmail"),
-                            "pessoaTelefone": pedido_data.get("pessoaTelefone"),
+                            "pessoaTelefone": None, # Precisa de param extra na API
                             "valorTotal": pedido_data.get("valorTotal"),
                             "valorFrete": pedido_data.get("valorFrete"),
                             "valorDesconto": pedido_data.get("valorDesconto"),
-                            "valorJuros": pedido_data.get("valorJuros"),
-                            "valorOutrasDespesas": pedido_data.get("valorOutrasDespesas"),
-                            "nfeNumero": pedido_data.get("nfeNumero"),
-                            "nfeSerie": pedido_data.get("nfeSerie"),
-                            "nfeChave": pedido_data.get("nfeChave"),
-                            "transportadora": pedido_data.get("transportadora"),
-                            "transportadoraNome": pedido_data.get("transportadoraNome"),
-                            "servicoEnvio": pedido_data.get("servicoEnvio"),
-                            "codigoRastreamento": pedido_data.get("codigoRastreamento"),
-                            "dataPrevisaoEntrega": pedido_data.get("dataPrevisaoEntrega"),
-                            "dataEntrega": pedido_data.get("dataEntrega"),
-                            "enderecoLogradouro": pedido_data.get("enderecoLogradouro"),
-                            "enderecoNumero": pedido_data.get("enderecoNumero"),
-                            "enderecoBairro": pedido_data.get("enderecoBairro"),
-                            "enderecoCidade": pedido_data.get("enderecoCidade"),
-                            "enderecoUf": pedido_data.get("enderecoUf"),
-                            "enderecoCep": pedido_data.get("enderecoCep")
+                            "valorJuros": pedido_data.get("valorAcrescimo"),
+                            "valorOutrasDespesas": None, # Não mapeado direto
+                            "nfeNumero": nf_1.get("numero"),
+                            "nfeSerie": nf_1.get("serieLegal"),
+                            "nfeChave": nf_1.get("chave"),
+                            "transportadora": rastreio_1.get("transportadoraNome"),
+                            "transportadoraNome": rastreio_1.get("transportadoraNome"),
+                            "servicoEnvio": rastreio_1.get("transportadoraServicoDescricao"),
+                            "codigoRastreamento": rastreio_1.get("codigoRastreio"),
+                            "dataPrevisaoEntrega": rastreio_1.get("dataLimiteEntregaCliente"),
+                            "dataEntrega": rastreio_1.get("dataLimitePostagem"),
+                            "enderecoLogradouro": pedido_data.get("logradouro"),
+                            "enderecoNumero": pedido_data.get("numero"),
+                            "enderecoComplemento": pedido_data.get("complemento"),
+                            "enderecoBairro": pedido_data.get("bairro"),
+                            "enderecoCidade": pedido_data.get("cidadeNome"),
+                            "enderecoUf": pedido_data.get("estadoSigla"),
+                            "enderecoCep": pedido_data.get("cep")
                         }
                     elif resp.status == 429:
                         delay = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** attempt) + random.random())

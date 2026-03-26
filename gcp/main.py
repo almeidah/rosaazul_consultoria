@@ -7,9 +7,9 @@ import order_items
 import stock
 import products
 import orders
-import products_tratados 
-import products_update # ⬅️ Novo módulo para atualização incremental
-import os
+import products_tratados # ⬅️ Novo módulo adicionado
+import products 
+
 
 # -------------------------------
 # 0️⃣ Logging
@@ -24,12 +24,8 @@ logger = logging.getLogger(__name__)
 # 1️⃣ Função Principal de Orquestração
 # -------------------------------
 async def main_pipeline():
-    # Variáveis para controlar o comportamento do Job via GCP
-    PRODUTOS_FULL_SYNC = os.getenv("PRODUTOS_FULL_SYNC", "false").lower() == "true"
-
     logger.info("==================================================")
     logger.info(f"🚀 INICIANDO PIPELINE DE EXTRAÇÃO MAGAZORD - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"MODO PRODUTOS: {'FULL SYNC' if PRODUTOS_FULL_SYNC else 'INCREMENTAL UPDATE'}")
     logger.info("==================================================")
 
     # 1. EXTRAÇÃO DE ITENS DE PEDIDOS
@@ -50,12 +46,8 @@ async def main_pipeline():
 
     # 3. EXTRAÇÃO DE PRODUTOS
     try:
-        if PRODUTOS_FULL_SYNC:
-            logger.info("\n[ETAPA 3/5] Chamando Extrator de PRODUTOS COMPLETO (products)...")
-            await products.executar_job()
-        else:
-            logger.info("\n[ETAPA 3/5] Chamando Extrator de PRODUTOS INCREMENTAL (products_update)...")
-            await products_update.executar_job()
+        logger.info("\n[ETAPA 3/5] Chamando Extrator de PRODUTOS (products)...")
+        await products.executar_job()
         logger.info("[ETAPA 3/5] ✅ PRODUTOS CONCLUÍDOS.")
     except Exception as e:
         logger.error(f"[ETAPA 3/5] ❌ FALHA nos Produtos: {e}")
