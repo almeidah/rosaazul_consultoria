@@ -5,7 +5,7 @@ import pandas as pd
 import logging
 from dotenv import load_dotenv
 from datetime import datetime
-from google.cloud import storage # Importar google.cloud.storage
+from google.cloud import storage 
 
 # -------------------------------
 # 0️⃣ Logging
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # 1️⃣ Carregar variáveis de ambiente
 # -------------------------------
 load_dotenv()
-BASE_URL = os.getenv("MAGAZORD_BASE_URL")   # ex: https://urlmagazord.com.br/api
+BASE_URL = os.getenv("MAGAZORD_BASE_URL")
 USER = os.getenv("MAGAZORD_USER")
 PASS = os.getenv("MAGAZORD_PASS")
 
@@ -32,9 +32,8 @@ REQUEST_TIMEOUT = 30
 MAX_CONCURRENT_REQUESTS = 2
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-# Configurações do Google Cloud Storage
-GCS_BUCKET_NAME = "magazord-bd" # Seu bucket no GCS
-GCS_FOLDER_NAME = "rosaazul" # Sua pasta dentro do bucket (prefíxo de objeto)
+GCS_BUCKET_NAME = "magazord-bd"
+GCS_FOLDER_NAME = "rosaazul"
 
 # -------------------------------
 # 3️⃣ Função para buscar página de produtos
@@ -91,18 +90,13 @@ async def fetch_all_produtos():
         return all_items
 
 # -------------------------------
-# 5️⃣ Função para upload no GCS (mantida dos scripts anteriores)
+# 5️⃣ Função para upload no GCS
 # -------------------------------
 def upload_file_to_gcs(file_path: str, bucket_name: str, folder_name: str):
-    """
-    Faz o upload de um arquivo para um bucket do Google Cloud Storage.
-    """
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
 
-    # Pega apenas o nome do arquivo do caminho completo
     file_name = os.path.basename(file_path)
-    # Define o blob name como 'pasta/nome_do_arquivo'
     blob_name = f"{folder_name}/{file_name}"
     blob = bucket.blob(blob_name)
 
@@ -125,14 +119,41 @@ async def main():
     if items:
         df = pd.DataFrame(items)
 
+        # ----------------------------------------------------
+        # 🗑️ REMOVER COLUNAS DESNECESSÁRIAS (mantemos categorias)
+        # ----------------------------------------------------
+        cols_to_drop = [c for c in ['acompanha'] if c in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+            logger.info("🗑️ Coluna acompanha removida com sucesso.")
+        # ----------------------------------------------------
+
+        # ----------------------------------------------------
+        # 🛠️ TRATAMENTO DA COLUNA DERIVAÇÕES
+        # ----------------------------------------------------
+        if 'derivacoes' in df.columns:
+            logger.info("🛠️ Tratando coluna 'derivacoes' (Explode & Normalize)...")
+            
+            # 1. Explode: Cria uma linha para cada variação
+            df = df.explode('derivacoes', ignore_index=True)
+
+            # 2. Normalize: Transforma o dicionário em colunas (id, codigo, nome, ativo)
+            derivacoes_normalized = pd.json_normalize(df['derivacoes'])
+
+            # 3. Renomear com SUFIXO (ex: id -> id_derivacao)
+            derivacoes_normalized = derivacoes_normalized.add_suffix('_derivacao')
+
+            # 4. Juntar o dataframe original com as novas colunas
+            df = pd.concat([df.drop(columns=['derivacoes']), derivacoes_normalized], axis=1)
+        # ----------------------------------------------------
+
         # --- Adiciona a nova coluna com a data de extração ---
         extraction_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         df["dataExtracao"] = extraction_date
         # ----------------------------------------------------
 
-        # Define o nome do arquivo fixo para sobrescrever
-        filename_local = "products.csv" 
-
+        filename_local = "products.csv"
+        
         output_dir = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul_consultoria/data/processed"
         os.makedirs(output_dir, exist_ok=True)
         full_local_path = os.path.join(output_dir, filename_local)

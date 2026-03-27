@@ -32,7 +32,7 @@ if not all([BASE_URL, USER, PASS]):
 # -------------------------------
 LIMIT = 100
 REQUEST_TIMEOUT = 30
-MAX_CONCURRENT_REQUESTS = 2
+MAX_CONCURRENT_REQUESTS = 3
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 # 🕒 Configuração de Incremental
@@ -41,7 +41,7 @@ DATE_FILTER = (datetime.now() - timedelta(days=DAYS_AGO_UPDATE)).strftime("%Y-%m
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
 GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")
-GCS_FILE_NAME = "produtos.csv" 
+GCS_FILE_NAME = "products.csv" 
 
 # -------------------------------
 # 3️⃣ Função para buscar página de produtos
@@ -68,7 +68,7 @@ async def fetch_produto_page(session, page: int):
                     data = result.get("data", {})
                     items = data.get("items", [])
                     has_more = data.get("has_more", False)
-                    logger.info(f"✔ Página {page} | {len(items)} itens")
+                    logger.info(f"✔ [Produtos Tratados] Página {page} | {len(items)} itens")
                     return items, has_more
                 else:
                     logger.error(f"🚫 Erro {resp.status} na página {page}")
@@ -116,18 +116,33 @@ def upload_data_to_gcs(data_string: str, bucket_name: str, blob_name: str):
 # 6️⃣ Função Principal do Módulo
 # -------------------------------
 async def executar_job():
-    logger.info(f"🚀 Buscando produtos (>= {DATE_FILTER})...")
+    logger.info(f"🚀 Iniciando extração e tratamento de Produtos (Derivações) (>= {DATE_FILTER})...")
     items = await fetch_all_produtos()
 
     if items:
         df = pd.DataFrame(items)
+
+        # Remove colunas indesejadas (mantemos categorias para análise de Curva ABC no BI)
+        cols_to_drop = [c for c in ['acompanha'] if c in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+        
+        # Trata Derivações
+        if 'derivacoes' in df.columns:
+            logger.info("🛠️ Normalizando derivações...")
+            # Explode a lista de derivações
+            df = df.explode('derivacoes', ignore_index=True)
+            # Normaliza o dicionário da coluna derivações
+            derivacoes_normalized = pd.json_normalize(df['derivacoes']).add_suffix('_derivacao')
+            # Combina com o original removendo a coluna bruta
+            df = pd.concat([df.drop(columns=['derivacoes']), derivacoes_normalized], axis=1)
+
         # Adiciona a data de extração
         df["dataExtracao"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        logger.info(f"✅ {len(df)} produtos processados. Gerando CSV.")
+        logger.info(f"✅ {len(df)} linhas processadas. Gerando CSV em memória.")
 
         csv_buffer = io.StringIO()
-        # Mantendo o separador ponto e vírgula se for preferência do usuário
         df.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
         csv_string = csv_buffer.getvalue()
 
