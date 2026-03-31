@@ -36,7 +36,7 @@ LIMIT = 100
 MAX_CONCURRENT = 2
 
 # Período de extração (Padrão 1 dia para Jobs frequentes)
-DIAS_ATRAS = int(os.getenv("DAYS_AGO", 30))
+DIAS_ATRAS = int(os.getenv("DAYS_AGO", 1))
 DATA_INICIO = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%m-%d")
 DATA_FIM    = datetime.today().strftime("%Y-%m-%d")
 

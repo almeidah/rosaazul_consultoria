@@ -40,7 +40,7 @@ MAX_RETRY_DELAY = 30.0
 REQUEST_TIMEOUT = 30
 
 # Período (Padrão 1 dia para Jobs frequentes)
-DIAS_ATRAS = int(os.getenv("DAYS_AGO", 30))
+DIAS_ATRAS = int(os.getenv("DAYS_AGO", 1))
 DATA_INICIO_STR = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%m-%d")
 DATA_FIM_STR    = datetime.today().strftime("%Y-%m-%d")
 

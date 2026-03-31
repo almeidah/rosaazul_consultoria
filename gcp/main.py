@@ -7,8 +7,6 @@ import order_items
 import stock
 import products
 import orders
-import products_tratados # ⬅️ Novo módulo adicionado
-import products 
 
 
 # -------------------------------
@@ -60,13 +58,6 @@ async def main_pipeline():
     except Exception as e:
         logger.error(f"[ETAPA 4/5] ❌ FALHA nos Pedidos (Cabeçalho): {e}")
 
-    # 5. EXTRAÇÃO DE PRODUTOS TRATADOS (Derivações)
-    try:
-        logger.info("\n[ETAPA 5/5] Chamando Extrator de PRODUTOS TRATADOS (products_tratados)...")
-        await products_tratados.executar_job()
-        logger.info("[ETAPA 5/5] ✅ PRODUTOS TRATADOS CONCLUÍDOS.")
-    except Exception as e:
-        logger.error(f"[ETAPA 5/5] ❌ FALHA nos Produtos Tratados: {e}")
 
 # -------------------------------
 # 2️⃣ Executar (Ponto de entrada do Container)

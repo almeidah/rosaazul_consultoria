@@ -36,7 +36,7 @@ MAX_CONCURRENT_REQUESTS = 3
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 # 🕒 Configuração de Incremental
-DAYS_AGO_UPDATE = int(os.getenv("DAYS_AGO_UPDATE", 3))
+DAYS_AGO_UPDATE = int(os.getenv("DAYS_AGO_UPDATE", 1))
 DATE_FILTER = (datetime.now() - timedelta(days=DAYS_AGO_UPDATE)).strftime("%Y-%m-%d %H:%M:%S")
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
@@ -67,32 +67,44 @@ async def fetch_produto_page(session, page: int):
                     result = await resp.json()
                     data = result.get("data", {})
                     items = data.get("items", [])
-                    has_more = data.get("has_more", False)
+                    total_pages = data.get("total_pages", 1)
                     logger.info(f"✔ [Produtos Tratados] Página {page} | {len(items)} itens")
-                    return items, has_more
+                    return items, total_pages
                 else:
                     logger.error(f"🚫 Erro {resp.status} na página {page}")
-                    return [], False
+                    return [], 0
     except Exception as e:
         logger.error(f"❌ Erro ao buscar página {page}: {e}")
-        return [], False
+        return [], 0
 
 # -------------------------------
-# 4️⃣ Buscar todos os produtos
+# 4️⃣ Buscar todos os produtos (EM PARALELO)
 # -------------------------------
 async def fetch_all_produtos():
     async with aiohttp.ClientSession() as session:
-        page = 1
         all_items = []
-        while True:
-            items, has_more = await fetch_produto_page(session, page)
-            if not items:
-                break
-            all_items.extend(items)
-            if not has_more:
-                break
-            page += 1
-            await asyncio.sleep(0.1)
+        
+        # 1. Primeira chamada instanciada
+        logger.info("Iniciando requisição da página 1 para descobrir o total_pages de Produtos...")
+        primeiros_itens, total_pages = await fetch_produto_page(session, 1)
+        if not primeiros_itens:
+            return []
+            
+        all_items.extend(primeiros_itens)
+        logger.info(f"📊 Total de páginas reportadas pela API: {total_pages}")
+
+        # 2. Chama o restante simultaneamente
+        tarefas = []
+        for page in range(2, total_pages + 1):
+            tarefas.append(fetch_produto_page(session, page))
+
+        if tarefas:
+            logger.info(f"🚀 Disparando {len(tarefas)} chamadas de produtos em PARALELO...")
+            resultados = await asyncio.gather(*tarefas)
+            for items, _ in resultados:
+                if items:
+                    all_items.extend(items)
+                    
         return all_items
 
 # -------------------------------

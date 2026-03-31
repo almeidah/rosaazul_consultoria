@@ -32,11 +32,11 @@ if not all([BASE_URL, USER, PASS]):
 # -------------------------------
 LIMIT = 100
 REQUEST_TIMEOUT = 30
-MAX_CONCURRENT_REQUESTS = 2
+MAX_CONCURRENT_REQUESTS = 3
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
-GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "meujeans")
+GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")
 GCS_FILE_NAME = "stock.csv" 
 
 # -------------------------------
@@ -44,7 +44,7 @@ GCS_FILE_NAME = "stock.csv"
 # -------------------------------
 async def fetch_estoque_page(session, offset: int, sku: str = None, produtoId: str = None):
     url = f"{BASE_URL}/v1/listEstoque"
-    params = {"limit": LIMIT, "offset": offset}
+    params = {"limit": LIMIT, "offset": offset, "ativo": "true"}
     if sku:
         params["produto"] = sku
     if produtoId:
@@ -60,32 +60,45 @@ async def fetch_estoque_page(session, offset: int, sku: str = None, produtoId: s
                 if resp.status == 200:
                     result = await resp.json()
                     items = result.get("data", [])
-                    has_more = len(items) == LIMIT
-                    logger.info(f"✔ Offset {offset} | {len(items)} itens")
-                    return items, has_more
+                    total = result.get("total", 0)
+                    logger.info(f"✔ Offset {offset} | {len(items)} itens | Status 200")
+                    return items, total
                 else:
                     logger.error(f"🚫 Erro {resp.status} na página com offset {offset}")
-                    return [], False
+                    return [], 0
     except Exception as e:
         logger.error(f"❌ Erro ao buscar página com offset {offset}: {e}")
-        return [], False
+        return [], 0
 
 # -------------------------------
-# 4️⃣ Buscar todo o estoque
+# 4️⃣ Buscar todo o estoque (EM PARALELO)
 # -------------------------------
 async def fetch_all_estoque(sku: str = None, produtoId: str = None):
     async with aiohttp.ClientSession() as session:
-        offset = 0
         all_items = []
-        while True:
-            items, has_more = await fetch_estoque_page(session, offset, sku, produtoId)
-            if not items:
-                break
-            all_items.extend(items)
-            if not has_more:
-                break
-            offset += LIMIT
-            await asyncio.sleep(0.1)
+        
+        # 1. Faz a primeira chamada (offset 0) para pegar itens e descobrir o total
+        logger.info("Iniciando requisição da página 1 (offset 0) para descobrir o total de SKUs...")
+        primeiros_itens, total = await fetch_estoque_page(session, 0, sku, produtoId)
+        if not primeiros_itens:
+            return []
+            
+        all_items.extend(primeiros_itens)
+        logger.info(f"📊 Total de SKUs acusados pela API: {total}")
+
+        # 2. Prepara as requisições para o resto das páginas
+        tarefas = []
+        # Começa do próximo offset (LIMIT) em saltos de LIMIT, até o total
+        for offset in range(LIMIT, total, LIMIT):
+            tarefas.append(fetch_estoque_page(session, offset, sku, produtoId))
+
+        if tarefas:
+            logger.info(f"🚀 Disparando {len(tarefas)} chamadas em modo ASSÍNCRONO e PARALELO...")
+            resultados = await asyncio.gather(*tarefas)
+            for items, _ in resultados:
+                if items:
+                    all_items.extend(items)
+                    
         return all_items
 
 # -------------------------------
@@ -131,7 +144,7 @@ async def executar_job():
         df = df[ordered_columns]
         
         csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
+        df.to_csv(csv_buffer, index=False, sep=",", decimal=".", encoding="utf-8")
         csv_string = csv_buffer.getvalue()
 
         logger.info(f"✅ {len(df)} itens processados. Gerando CSV.")
