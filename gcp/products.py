@@ -37,7 +37,7 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 # 🕒 Configuração de Incremental
 DAYS_AGO_UPDATE = int(os.getenv("DAYS_AGO_UPDATE", 1))
-DATE_FILTER = (datetime.now() - timedelta(days=DAYS_AGO_UPDATE)).strftime("%Y-%m-%d %H:%M:%S")
+DATE_FILTER = (datetime.now() - timedelta(days=DAYS_AGO_UPDATE)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "magazord-bd")
 GCS_FOLDER_NAME = os.getenv("GCS_FOLDER_NAME", "rosaazul")

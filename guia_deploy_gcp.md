@@ -46,6 +46,7 @@ gcloud run jobs create extrator-rosaazul \
     --region us-east1 \
     --memory 512Mi \
     --cpu 1 \
+    --task-timeout=3600s \
     --set-env-vars "MAGAZORD_BASE_URL=https://rosaazul.painel.magazord.com.br/api" \
     --set-env-vars "MAGAZORD_USER=MZDK1161b2cc8ac3c1fdaf1be7db6f1ed07c799cf8407378cfeefddf1ce36d5e" \
     --set-env-vars "MAGAZORD_PASS=3IApBGki0%\$o" \
