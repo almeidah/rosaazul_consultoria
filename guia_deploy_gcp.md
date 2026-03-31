@@ -48,7 +48,7 @@ gcloud run jobs create extrator-rosaazul \
     --cpu 1 \
     --set-env-vars "MAGAZORD_BASE_URL=https://rosaazul.painel.magazord.com.br/api" \
     --set-env-vars "MAGAZORD_USER=MZDK1161b2cc8ac3c1fdaf1be7db6f1ed07c799cf8407378cfeefddf1ce36d5e" \
-    --set-env-vars "MAGAZORD_PASS=3IApBGki0%$o" \
+    --set-env-vars "MAGAZORD_PASS=3IApBGki0%\$o" \
     --set-env-vars "DAYS_AGO=1" \
     --set-env-vars "GCS_BUCKET_NAME=magazord-bd" \
     --set-env-vars "GCS_FOLDER_NAME=rosaazul"
@@ -76,7 +76,7 @@ Para cada Job de cliente, você cria um agendamento:
 
 ```bash
 gcloud scheduler jobs create http trigger-rosaazul \
-    --schedule="30 5,17 * * *" \
+    --schedule="30 23,11 * * *" \
     --uri="https://us-east1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/sandbox-magazord/jobs/extrator-rosaazul:run" \
     --http-method=POST \
     --oauth-service-account-email="544087220472-compute@developer.gserviceaccount.com" \
