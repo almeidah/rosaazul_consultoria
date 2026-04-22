@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 import asyncio
 import aiohttp
 import pandas as pd
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 # -------------------------------
 # 1️⃣ Carregar e Validar variáveis de ambiente
 # -------------------------------
+load_dotenv()
 BASE_URL = os.getenv("MAGAZORD_BASE_URL")
 USER = os.getenv("MAGAZORD_USER")
 PASS = os.getenv("MAGAZORD_PASS")
@@ -64,7 +66,6 @@ async def buscar_detalhe_pedido(session, codigo_pedido):
             try:
                 async with session.get(detalhe_url, 
                                        auth=aiohttp.BasicAuth(USER, PASS), 
-                                       timeout=REQUEST_TIMEOUT,
                                        ssl=False) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -140,15 +141,21 @@ async def buscar_pagina_lista(session, page, data_inicio, data_fim):
             async with session.get(f"{BASE_URL}/v2/site/pedido",
                                    auth=aiohttp.BasicAuth(USER, PASS),
                                    params=params,
-                                   timeout=REQUEST_TIMEOUT,
                                    ssl=False) as resp:
                 if resp.status == 200:
                     result = await resp.json()
                     items = result.get("data", {}).get("items", [])
                     has_more = result.get("data", {}).get("has_more", False)
                     return items, has_more
-                return [], False
-        except Exception:
+                else:
+                    text = await resp.text()
+                    logger.error(f"❌ Erro HTTP {resp.status} em buscar_pagina_lista: {text}")
+                    return [], False
+        except asyncio.TimeoutError:
+            logger.error(f"❌ Timeout ao buscar página {page}.")
+            return [], False
+        except Exception as e:
+            logger.error(f"❌ Exceção ao buscar página {page}: {e}")
             return [], False
 
 # -------------------------------

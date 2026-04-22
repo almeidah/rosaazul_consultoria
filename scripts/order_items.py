@@ -33,7 +33,7 @@ LIMIT = 100
 MAX_CONCURRENT = 3
 
 # 📅 Período a ser consultado (Ajuste para a carga inicial desejada)
-DIAS_ATRAS = 1
+DIAS_ATRAS = 7
 DATA_INICIO = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%m-%d")
 DATA_FIM    = datetime.today().strftime("%Y-%m-%d")
 
