@@ -1,5 +1,4 @@
 import os
-from dotenv import load_dotenv
 import asyncio
 import aiohttp
 import pandas as pd
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 # -------------------------------
 # 1️⃣ Carregar e Validar variáveis de ambiente
 # -------------------------------
-load_dotenv()
 BASE_URL = os.getenv("MAGAZORD_BASE_URL")
 USER = os.getenv("MAGAZORD_USER")
 PASS = os.getenv("MAGAZORD_PASS")
@@ -86,6 +84,9 @@ async def buscar_detalhe_pedido(session, codigo_pedido):
                             "vendedor": pedido_data.get("codigoVendedor"),
                             "apelidoVendedor": None, # Não aplicável
                             "canalVenda": pedido_data.get("origem"),
+                            "codigoMarketplace": pedido_data.get("codigoMarketplace"),
+                            "marketplaceNome": pedido_data.get("marketplaceNome"),
+                            "lojaMarketplaceNome": pedido_data.get("lojaMarketplaceNome"),
                             "formaPagamento": pedido_data.get("formaPagamentoNome"),
                             "pessoaId": pedido_data.get("pessoaId"),
                             "pessoaNome": pedido_data.get("pessoaNome"),

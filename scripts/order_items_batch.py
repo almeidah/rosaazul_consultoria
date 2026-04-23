@@ -108,6 +108,9 @@ async def buscar_itens(session, pedido):
                         "vendedor": pedido_data.get("codigoVendedor"),
                         "apelidoVendedor": None, # Não aplicável no Magazord
                         "canalVenda": pedido_data.get("origem"),
+                        "codigoMarketplace": pedido_data.get("codigoMarketplace"),
+                        "marketplaceNome": pedido_data.get("marketplaceNome"),
+                        "lojaMarketplaceNome": pedido_data.get("lojaMarketplaceNome"),
                         "formaPagamento": pedido_data.get("formaPagamentoNome"),
                         "pessoaId": pedido_data.get("pessoaId"),
                         "cliente": pedido_data.get("pessoaNome"),

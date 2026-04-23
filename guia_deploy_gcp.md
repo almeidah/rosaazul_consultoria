@@ -27,10 +27,17 @@ gcloud artifacts repositories create magazord-images \
 ```
 
 ## 3. Construir e Enviar a Imagem do Cliente
-Execute este comando dentro da pasta `gcp/`. Ele criará uma "caixa" específica para o cliente dentro do seu repositório:
+Execute o comando abaixo estando na raiz do seu projeto. O parâmetro `cd gcp &&` garantirá que o build lerá seu `Dockerfile` dentro da pasta `gcp/`:
 
 ```bash
-gcloud builds submit --tag us-east1-docker.pkg.dev/sandbox-magazord/magazord-images/rosaazul:v1 .
+cd gcp && gcloud builds submit --tag us-east1-docker.pkg.dev/sandbox-magazord/magazord-images/rosaazul:v1 .
+```
+
+### 3.1 Atualizando uma imagem existente (Deploy de correções)
+Sempre que você alterar um arquivo Python e quiser mandar para a nuvem, você deve primeiro rodar o comando de "Construir e Enviar" (acima). Depois, com a imagem nova no repositório, avise ao seu Job para recarregar a imagem mais nova (pois senão ele fica congelado na imagem original):
+
+```bash
+gcloud run jobs update extrator-rosaazul --image us-east1-docker.pkg.dev/sandbox-magazord/magazord-images/rosaazul:v1 --region us-east1
 ```
 
 ---
