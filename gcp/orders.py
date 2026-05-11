@@ -131,7 +131,7 @@ async def buscar_pagina_lista(session, page, data_inicio, data_fim):
     params = {
         "dataHoraUltimaAlteracaoSituacao[gte]": data_inicio,
         "dataHoraUltimaAlteracaoSituacao[lte]": data_fim,
-        "situacao": ",".join(map(str, SITUACOES_APROVADO)),
+        #"situacao": ",".join(map(str, SITUACOES_APROVADO)),
         "limit": LIMIT,
         "page": page,
         "orderDirection": "asc"

@@ -5,7 +5,6 @@ import pandas as pd
 import random
 import logging
 import io
-import glob
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from google.cloud import storage 
@@ -32,19 +31,18 @@ PASS = os.getenv("MAGAZORD_PASS")
 # -------------------------------
 SITUACOES_APROVADO = [4, 5, 6, 7, 8]
 LIMIT = 100
-MAX_CONCURRENT = 3
+MAX_CONCURRENT = 2
 
 # Período a ser consultado
-DIAS_ATRAS = 477
-DATA_INICIO = (datetime.today() - timedelta(days=DIAS_ATRAS)).strftime("%Y-%m-%d")
+DATA_INICIO = "2025-01-01"
 DATA_FIM    = datetime.today().strftime("%Y-%m-%d")
 
 # Pasta destino local
-PASTA_DESTINO = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul_consultoria/data/processed"
+PASTA_DESTINO = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Meu Jeans/meujeans-code/meusjeans-consultoria/data/processed"
 
 # Configurações do Google Cloud Storage
 GCS_BUCKET_NAME = "magazord-bd"
-GCS_FOLDER_NAME = "rosaazul"
+GCS_FOLDER_NAME = "meujeans"
 
 # -------------------------------
 # 3️⃣ Função para buscar a lista de pedidos de um dia
@@ -56,7 +54,6 @@ async def buscar_pedidos(session, data_inicio, data_fim):
         params = {
             "dataHora[gte]": data_inicio,
             "dataHora[lte]": data_fim,
-            "situacao": ",".join(map(str, SITUACOES_APROVADO)),
             "limit": LIMIT,
             "page": page,
             "orderDirection": "asc"
@@ -73,8 +70,16 @@ async def buscar_pedidos(session, data_inicio, data_fim):
                 pedidos = result.get("data", {}).get("items", [])
                 if not pedidos:
                     break
-                todos_pedidos.extend(pedidos)
-                logger.info(f"✅ Página {page} carregada ({len(pedidos)} pedidos)")
+                
+                # Pega apenas os pedidos cuja situação NÃO está na lista SITUACOES_APROVADO
+                pedidos_filtrados = [
+                    p for p in pedidos 
+                    if p.get("situacao") not in SITUACOES_APROVADO 
+                    and p.get("pedidoSituacao") not in SITUACOES_APROVADO
+                ]
+                
+                todos_pedidos.extend(pedidos_filtrados)
+                logger.info(f"✅ Página {page} carregada ({len(pedidos)} pedidos totais, {len(pedidos_filtrados)} não aprovados)")
                 page += 1
         except Exception as e:
             logger.error(f"❌ Exceção ao buscar pedidos na página {page}: {e}")
@@ -174,7 +179,7 @@ def upload_file_to_gcs(file_path: str, bucket_name: str, folder_name: str):
 # -------------------------------
 async def processar_dia(session, data_inicio, data_fim):
     pedidos = await buscar_pedidos(session, data_inicio, data_fim)
-    logger.info(f"📌 Total de pedidos do dia {data_inicio}: {len(pedidos)}")
+    logger.info(f"📌 Total de pedidos não-aprovados do dia {data_inicio}: {len(pedidos)}")
 
     tarefas = []
     todos_detalhes = []
@@ -192,48 +197,7 @@ async def processar_dia(session, data_inicio, data_fim):
     return todos_detalhes
 
 # -------------------------------
-# 7️⃣ Funções auxiliares para arquivos mensais
-# -------------------------------
-def salvar_arquivo_mensal(dados, mes, pasta_destino, prefixo):
-    if not dados:
-        return
-    df = pd.DataFrame(dados)
-    os.makedirs(pasta_destino, exist_ok=True)
-    arquivo = os.path.join(pasta_destino, f"{prefixo}_{mes}.csv")
-    df.to_csv(arquivo, index=False, encoding="utf-8-sig")
-    logger.info(f"📂 Arquivo mensal salvo: {arquivo} com {len(df)} registros.")
-
-def juntar_arquivos_e_subir(pasta_destino, prefixo, arquivo_final, bucket_name, folder_name):
-    padrao = os.path.join(pasta_destino, f"{prefixo}_*.csv")
-    arquivos = glob.glob(padrao)
-    
-    if not arquivos:
-        logger.warning("⚠ Nenhum arquivo mensal encontrado para juntar.")
-        return
-        
-    logger.info(f"🔄 Juntando {len(arquivos)} arquivos mensais...")
-    dfs = []
-    for arq in sorted(arquivos):
-        try:
-            dfs.append(pd.read_csv(arq))
-        except Exception as e:
-            logger.error(f"❌ Erro ao ler {arq}: {e}")
-            
-    if dfs:
-        df_final = pd.concat(dfs, ignore_index=True)
-        caminho_final = os.path.join(pasta_destino, arquivo_final)
-        df_final.to_csv(caminho_final, index=False, encoding="utf-8-sig")
-        logger.info(f"✅ Arquivo final consolidado gerado: {caminho_final} com {len(df_final)} registros totais.")
-        
-        # Subir para GCS
-        sucesso = upload_file_to_gcs(caminho_final, bucket_name, folder_name)
-        
-        # Mantendo os arquivos mensais salvos permanentemente (a pedido)
-        if sucesso:
-            logger.info("📁 Arquivos mensais mantidos no disco (não apagados).")
-
-# -------------------------------
-# 8️⃣ Main Loop
+# 7️⃣ Main Loop
 # -------------------------------
 async def main():
     async with aiohttp.ClientSession() as session:
@@ -242,31 +206,27 @@ async def main():
         delta = timedelta(days=1)
 
         dia_atual = inicio
-        mes_atual = inicio.strftime("%Y-%m")
-        pedidos_mes_atual = []
+        todos_pedidos_periodo = []
 
         while dia_atual <= fim:
-            mes_dia_atual = dia_atual.strftime("%Y-%m")
-            
-            # Mudou de mês, salva o que acumulou no mês anterior
-            if mes_dia_atual != mes_atual:
-                if pedidos_mes_atual:
-                    salvar_arquivo_mensal(pedidos_mes_atual, mes_atual, PASTA_DESTINO, "orders_temp")
-                mes_atual = mes_dia_atual
-                pedidos_mes_atual = []
-
             data_str = dia_atual.strftime("%Y-%m-%d")
             logger.info(f"\n🔹 Processando pedidos do dia {data_str}")
             detalhes_dia = await processar_dia(session, data_str, data_str)
-            pedidos_mes_atual.extend(detalhes_dia)
+            todos_pedidos_periodo.extend(detalhes_dia)
             dia_atual += delta
 
-        # Salva o último mês residual
-        if pedidos_mes_atual:
-            salvar_arquivo_mensal(pedidos_mes_atual, mes_atual, PASTA_DESTINO, "orders_temp")
+        if todos_pedidos_periodo:
+            df = pd.DataFrame(todos_pedidos_periodo)
+            filename_local = "orders.csv"
+            os.makedirs(PASTA_DESTINO, exist_ok=True)
+            full_local_path = os.path.join(PASTA_DESTINO, filename_local)
+            
+            df.to_csv(full_local_path, index=False, encoding="utf-8-sig")
+            logger.info(f"\n📂 Total de {len(df)} pedidos não aprovados salvos em {full_local_path}")
 
-        # Concatena os meses gerados e sobe para o GCS
-        juntar_arquivos_e_subir(PASTA_DESTINO, "orders_temp", "orders.csv", GCS_BUCKET_NAME, GCS_FOLDER_NAME)
+            upload_file_to_gcs(full_local_path, GCS_BUCKET_NAME, GCS_FOLDER_NAME)
+        else:
+            logger.warning("⚠ Nenhum pedido não aprovado encontrado.")
 
 if __name__ == "__main__":
     asyncio.run(main())
