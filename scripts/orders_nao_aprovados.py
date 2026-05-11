@@ -35,14 +35,14 @@ MAX_CONCURRENT = 2
 
 # Período a ser consultado
 DATA_INICIO = "2025-01-01"
-DATA_FIM    = datetime.today().strftime("%Y-%m-%d")
+DATA_FIM    = "2025-06-30" # datetime.today().strftime("%Y-%m-%d")
 
 # Pasta destino local
-PASTA_DESTINO = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Meu Jeans/meujeans-code/meusjeans-consultoria/data/processed"
+PASTA_DESTINO = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul-consultoria/data/processed"
 
 # Configurações do Google Cloud Storage
 GCS_BUCKET_NAME = "magazord-bd"
-GCS_FOLDER_NAME = "meujeans"
+GCS_FOLDER_NAME = "rosaazul"
 
 # -------------------------------
 # 3️⃣ Função para buscar a lista de pedidos de um dia
