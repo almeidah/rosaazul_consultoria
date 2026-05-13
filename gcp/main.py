@@ -6,6 +6,7 @@ from datetime import datetime
 import order_items
 import stock
 import products
+import products_category
 import orders
 import orders_extras
 
@@ -58,14 +59,22 @@ async def main_pipeline():
         logger.info("[ETAPA 4/5] ✅ PEDIDOS (Cabeçalho) CONCLUÍDOS.")
     except Exception as e:
         logger.error(f"[ETAPA 4/5] ❌ FALHA nos Pedidos (Cabeçalho): {e}")
-
-    # 5. EXTRAÇÃO DE PEDIDOS EXTRAS (Frete Transportadora)
+    # 5. EXTRAÇÃO DE PRODUTOS CATEGORIAS
     try:
-        logger.info("\n[ETAPA 5/5] Chamando Extrator de PEDIDOS EXTRAS (orders_extras)...")
-        await orders_extras.executar_job()
-        logger.info("[ETAPA 5/5] ✅ PEDIDOS EXTRAS CONCLUÍDOS.")
+        logger.info("\n[ETAPA 5/6] Chamando Extrator de PRODUTOS CATEGORIAS (products_category)...")
+        await products_category.executar_job()
+        logger.info("[ETAPA 5/6] ✅ PRODUTOS CATEGORIAS CONCLUÍDOS.")
     except Exception as e:
-        logger.error(f"[ETAPA 5/5] ❌ FALHA nos Pedidos Extras: {e}")
+        logger.error(f"[ETAPA 5/6] ❌ FALHA nos Produtos Categorias: {e}")
+
+    # 6. EXTRAÇÃO DE PEDIDOS EXTRAS (Frete/Transportadora)
+    try:
+        logger.info("\n[ETAPA 6/6] Chamando Extrator de PEDIDOS EXTRAS (orders_extras)...")
+        await orders_extras.executar_job()
+        logger.info("[ETAPA 6/6] ✅ PEDIDOS EXTRAS CONCLUÍDOS.")
+    except Exception as e:
+        logger.error(f"[ETAPA 6/6] ❌ FALHA nos Pedidos Extras: {e}")
+
 
 
 # -------------------------------
