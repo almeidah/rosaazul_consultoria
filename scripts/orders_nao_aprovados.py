@@ -34,8 +34,8 @@ LIMIT = 100
 MAX_CONCURRENT = 2
 
 # Período a ser consultado
-DATA_INICIO = "2025-01-01"
-DATA_FIM    = "2025-06-30" # datetime.today().strftime("%Y-%m-%d")
+DATA_INICIO = "2025-07-01"
+DATA_FIM    = "2025-12-31" # datetime.today().strftime("%Y-%m-%d")
 
 # Pasta destino local
 PASTA_DESTINO = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul-consultoria/data/processed"
