@@ -34,7 +34,7 @@ MAX_CONCURRENT_REQUESTS = 2
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 GCS_BUCKET_NAME = "magazord-bd"
-GCS_FOLDER_NAME = "meujeans"
+GCS_FOLDER_NAME = "rosaazul"
 
 # -------------------------------
 # 3️⃣ Função para buscar página de produtos
@@ -218,7 +218,7 @@ async def main():
 
         filename_local = "products_category.csv"
         
-        output_dir = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Meu Jeans/meujeans-code/meusjeans-consultoria/data/processed"
+        output_dir = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul_consultoria/data/processed"
         os.makedirs(output_dir, exist_ok=True)
         full_local_path = os.path.join(output_dir, filename_local)
         

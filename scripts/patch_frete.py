@@ -61,7 +61,7 @@ async def buscar_pedidos(session, data_inicio, data_fim):
         params = {
             "dataHora[gte]": data_inicio,
             "dataHora[lte]": data_fim,
-            "situacao": ",".join(map(str, SITUACOES_APROVADO)),
+            #"situacao": ",".join(map(str, SITUACOES_APROVADO)),
             "limit": LIMIT,
             "page": page
         }
@@ -180,7 +180,7 @@ async def main():
             
             if mes_dia_atual != mes_atual:
                 if pedidos_mes_atual:
-                    salvar_arquivo_mensal(pedidos_mes_atual, mes_atual, PASTA_DESTINO, "patch_frete_temp")
+                    salvar_arquivo_mensal(pedidos_mes_atual, mes_atual, PASTA_DESTINO, "orders_extras")
                 mes_atual = mes_dia_atual
                 pedidos_mes_atual = []
 
@@ -191,9 +191,9 @@ async def main():
             dia_atual += delta
 
         if pedidos_mes_atual:
-            salvar_arquivo_mensal(pedidos_mes_atual, mes_atual, PASTA_DESTINO, "patch_frete_temp")
+            salvar_arquivo_mensal(pedidos_mes_atual, mes_atual, PASTA_DESTINO, "orders_extras")
 
-        juntar_arquivos_e_subir(PASTA_DESTINO, "patch_frete_temp", "patch_frete.csv", GCS_BUCKET_NAME, GCS_FOLDER_NAME)
+        juntar_arquivos_e_subir(PASTA_DESTINO, "orders_extras", "orders_extras.csv", GCS_BUCKET_NAME, GCS_FOLDER_NAME)
 
 if __name__ == "__main__":
     asyncio.run(main())
