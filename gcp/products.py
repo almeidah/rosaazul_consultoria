@@ -2,8 +2,10 @@ import os
 import asyncio
 import aiohttp
 import pandas as pd
+import random
+import io
+import csv
 import logging
-import io 
 from datetime import datetime, timedelta
 from google.cloud import storage 
 
@@ -152,10 +154,17 @@ async def executar_job():
         # Adiciona a data de extração
         df["dataExtracao"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        logger.info(f"✅ {len(df)} linhas processadas. Gerando CSV em memória.")
+        # --- Tratamento de Segurança para o BigQuery ---
+        # Remove quebras de linha e retornos de carro de todas as colunas de texto
+        # para garantir que o BigQuery não se perca ao ler o CSV delimitado por vírgula.
+        for col in df.select_dtypes(include=['object']).columns:
+            df[col] = df[col].astype(str).str.replace('\n', ' ', regex=False).str.replace('\r', '', regex=False)
+        # ----------------------------------------------------
+
+        logger.info(f"✅ {len(df)} linhas processadas. Gerando CSV em memória com delimitador vírgula.")
 
         csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
+        df.to_csv(csv_buffer, index=False, sep=",", encoding="utf-8-sig", quoting=csv.QUOTE_MINIMAL)
         csv_string = csv_buffer.getvalue()
 
         blob_path = f"{GCS_FOLDER_NAME}/{GCS_FILE_NAME}"

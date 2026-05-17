@@ -3,6 +3,7 @@ import asyncio
 import aiohttp
 import pandas as pd
 import logging
+import csv
 from dotenv import load_dotenv
 from datetime import datetime
 from google.cloud import storage 
@@ -161,13 +162,20 @@ async def main():
         df["dataExtracao"] = extraction_date
         # ----------------------------------------------------
 
+        # --- Tratamento de Segurança para o BigQuery ---
+        # Remove quebras de linha e retornos de carro de todas as colunas de texto
+        # para garantir que o BigQuery não se perca ao ler o CSV delimitado por vírgula.
+        for col in df.select_dtypes(include=['object']).columns:
+            df[col] = df[col].astype(str).str.replace('\n', ' ', regex=False).str.replace('\r', '', regex=False)
+        # ----------------------------------------------------
+
         filename_local = "products.csv"
         
         output_dir = r"/Users/henriquealmeida/Library/CloudStorage/GoogleDrive-henriquesilveiradealmeida@gmail.com/Meu Drive/Consultoria/Rosa azul/rosaazul-code/rosaazul_consultoria/data/processed"
         os.makedirs(output_dir, exist_ok=True)
         full_local_path = os.path.join(output_dir, filename_local)
         
-        df.to_csv(full_local_path, index=False, sep=";", encoding="utf-8-sig")
+        df.to_csv(full_local_path, index=False, sep=",", encoding="utf-8-sig", quoting=csv.QUOTE_MINIMAL)
         logger.info(f"✅ Produtos salvos localmente em {full_local_path} ({len(df)} linhas)")
 
         # --- Chamada para upload no GCS ---
