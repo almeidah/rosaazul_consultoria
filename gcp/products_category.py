@@ -196,6 +196,23 @@ async def executar_job():
         # Adiciona a data de extração
         df["dataExtracao"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # --- Garantir Esquema Fixo para o BigQuery ---
+        EXPECTED_COLUMNS = [
+            "id", "nome", "palavraChave", "peso", "altura", "largura", "comprimento",
+            "codigo", "tipo", "marca", "unidadeMedida", "ativo", "ncm", "cest", "origemFiscal",
+            "dataLancamento", "dataAtualizacao", "categorias", 
+            "categoria_nivel_1", "categoria_nivel_2", "categoria_nivel_3", "categoria_nivel_4",
+            "modelo", "id_derivacao", "codigo_derivacao", "nome_derivacao", "ativo_derivacao", "dataExtracao"
+        ]
+
+        # 1. Cria colunas ausentes com valor nulo
+        for col in EXPECTED_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
+
+        # 2. Força a ordem exata das colunas e descarta colunas extras surpresas
+        df = df[EXPECTED_COLUMNS]
+
         # --- Tratamento de Segurança para o BigQuery ---
         # Remove quebras de linha e retornos de carro de todas as colunas de texto
         # para garantir que o BigQuery não se perca ao ler o CSV delimitado por vírgula.

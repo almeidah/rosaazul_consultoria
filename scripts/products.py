@@ -157,10 +157,24 @@ async def main():
             df = pd.concat([df.drop(columns=['derivacoes']), derivacoes_normalized], axis=1)
         # ----------------------------------------------------
 
-        # --- Adiciona a nova coluna com a data de extração ---
-        extraction_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        df["dataExtracao"] = extraction_date
-        # ----------------------------------------------------
+        # Adiciona a data de extração
+        df["dataExtracao"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # --- Garantir Esquema Fixo para o BigQuery ---
+        EXPECTED_COLUMNS = [
+            "id", "nome", "palavraChave", "peso", "altura", "largura", "comprimento",
+            "codigo", "tipo", "marca", "unidadeMedida", "ativo", "ncm", "cest", "origemFiscal",
+            "dataLancamento", "dataAtualizacao", "categorias", 
+            "modelo", "id_derivacao", "codigo_derivacao", "nome_derivacao", "ativo_derivacao", "dataExtracao"
+        ]
+
+        # 1. Cria colunas ausentes com valor nulo
+        for col in EXPECTED_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
+
+        # 2. Força a ordem exata das colunas e descarta colunas extras surpresas
+        df = df[EXPECTED_COLUMNS]
 
         # --- Tratamento de Segurança para o BigQuery ---
         # Remove quebras de linha e retornos de carro de todas as colunas de texto
