@@ -5,7 +5,7 @@ import pandas as pd
 import logging
 import csv
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.cloud import storage 
 
 # -------------------------------
@@ -36,6 +36,10 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 GCS_BUCKET_NAME = "magazord-bd"
 GCS_FOLDER_NAME = "rosaazul"
 
+# 🕒 Configuração de Incremental (Mesmo da GCP)
+DAYS_AGO_UPDATE = int(os.getenv("DAYS_AGO_UPDATE", 1))
+DATE_FILTER = (datetime.now() - timedelta(days=DAYS_AGO_UPDATE)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 # -------------------------------
 # 3️⃣ Função para buscar página de produtos
 # -------------------------------
@@ -45,7 +49,8 @@ async def fetch_produto_page(session, page: int):
         "limit": LIMIT,
         "page": page,
         "order": "id",
-        "orderDirection": "asc"
+        "orderDirection": "asc",
+        "dataAtualizacaoInicio": DATE_FILTER
     }
 
     try:
