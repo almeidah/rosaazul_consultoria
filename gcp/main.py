@@ -7,6 +7,7 @@ import order_items
 import stock
 import products
 import products_category
+import products_all_category
 import orders
 import orders_extras
 
@@ -66,6 +67,14 @@ async def main_pipeline():
         logger.info("[ETAPA 5/6] ✅ PRODUTOS CATEGORIAS CONCLUÍDOS.")
     except Exception as e:
         logger.error(f"[ETAPA 5/6] ❌ FALHA nos Produtos Categorias: {e}")
+
+    # 5b. EXTRAÇÃO DE PRODUTOS COM TODAS AS CATEGORIAS (products_all_category)
+    try:
+        logger.info("\n[ETAPA 5b] Chamando Extrator de PRODUTOS E CATEGORIAS COMPLETO (products_all_category)...")
+        await products_all_category.executar_job()
+        logger.info("[ETAPA 5b] ✅ PRODUTOS E CATEGORIAS COMPLETO CONCLUÍDOS.")
+    except Exception as e:
+        logger.error(f"[ETAPA 5b] ❌ FALHA nos Produtos e Categorias Completo: {e}")
 
     # 6. EXTRAÇÃO DE PEDIDOS EXTRAS (Frete/Transportadora)
     try:
